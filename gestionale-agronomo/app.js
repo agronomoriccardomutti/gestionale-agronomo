@@ -3,7 +3,13 @@
   'use strict';
   const L = window.Lib;
   const KEY = 'gestionale-agronomo:v1';
-  const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+  // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture'] }, window.GESTIONALE_CONFIG);
+  cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
+  cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
+  const synced = (ek) => !cfg.localOnly.includes(ek);
 
   /* ---------- DOM helper (nessun innerHTML: i dati utente sono sempre testo) ---------- */
   function h(tag, attrs, ...kids) {
@@ -271,12 +277,20 @@
     o.version = 1;
     o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000 }, o.settings);
     o.data = o.data && typeof o.data === 'object' ? o.data : {};
-    for (const k of Object.keys(ENT)) o.data[k] = Array.isArray(o.data[k]) ? o.data[k] : [];
+    o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', deleted: [] }, o.meta);
+    if (!Array.isArray(o.meta.deleted)) o.meta.deleted = [];
+    const now = new Date().toISOString();
+    for (const k of Object.keys(ENT)) {
+      o.data[k] = Array.isArray(o.data[k]) ? o.data[k] : [];
+      for (const r of o.data[k]) if (!r.updated) r.updated = now;
+    }
     return o;
   }
   let db;
   try { db = normalize(JSON.parse(localStorage.getItem(KEY))); } catch (e) { db = normalize({}); }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { toast('Salvataggio non riuscito (spazio pieno?). Esporta un backup.'); } }
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { toast('Salvataggio non riuscito (spazio pieno?). Esporta un backup.'); } }
+  function save() { persist(); scheduleSync(); }
+  function tombstone(ek, id) { if (synced(ek)) db.meta.deleted.push({ id, entity: ek, updated: new Date().toISOString() }); }
   const rows = (ek) => db.data[ek];
   const byId = (ek, id) => rows(ek).find((r) => r.id === id);
   const sum = (list, k) => list.reduce((a, r) => a + (+r[k] || 0), 0);
@@ -361,7 +375,7 @@
     form.append(h('div', { class: 'dlg-btns' },
       !isNew && h('button', { type: 'button', class: 'del', onclick: () => {
         if (!confirm('Eliminare questo elemento?')) return;
-        db.data[ek] = rows(ek).filter((x) => x.id !== r.id); save(); close(); route(); toast('Eliminato');
+        tombstone(ek, r.id); db.data[ek] = rows(ek).filter((x) => x.id !== r.id); save(); close(); route(); toast('Eliminato');
       } }, 'Elimina'),
       h('button', { type: 'button', onclick: close }, 'Annulla'),
       h('button', { type: 'submit', class: 'pri' }, 'Salva')));
@@ -430,7 +444,7 @@
       next && relBadge(next.date),
       (ent.actions || []).filter((a) => a.show(r)).map((a) => btn(a.label, () => {
         const i = rows(ek).findIndex((x) => x.id === r.id); const copy = Object.assign({}, rows(ek)[i]);
-        a.run(copy); rows(ek)[i] = copy; save(); route();
+        a.run(copy); copy.updated = new Date().toISOString(); rows(ek)[i] = copy; save(); route();
       })),
       evs.length > 0 && btn('📅 Calendario', () => exportICS(evs, ek + '-' + (ent.title(r) || 'evento').replace(/[^\w]+/g, '_').slice(0, 30) + '.ics'))));
   }
@@ -488,7 +502,7 @@
 
   function seedDemo() {
     const t = L.today(); const d = (n) => L.addDays(t, n);
-    const add = (ek, o) => { const r = Object.assign({ id: uid() }, o); rows(ek).push(r); return r.id; };
+    const add = (ek, o) => { const r = Object.assign({ id: uid(), updated: new Date().toISOString() }, o); rows(ek).push(r); return r.id; };
     const p1 = add('parcelle', { nome: 'Pescheto (esempio)', coltura: 'Pesco', ettari: 2.5 });
     add('parcelle', { nome: 'Noccioleto (esempio)', coltura: 'Nocciolo', ettari: 4 });
     add('magazzino', { prodotto: 'Prodotto di esempio', tipo: 'Fitofarmaco', quantita: 5, unita: 'l', scadenza: d(60) });
@@ -520,7 +534,7 @@
         const o = JSON.parse(await f.text());
         if (!o || typeof o !== 'object' || !o.data || typeof o.data !== 'object') throw new Error('formato');
         if (!confirm('Sostituire TUTTI i dati attuali con quelli del backup?')) return;
-        db = normalize(o); save(); route(); toast('Backup ripristinato');
+        restoreFrom(o); save(); route(); toast('Backup ripristinato');
       } catch (err) { toast('File di backup non valido'); }
       e.target.value = '';
     } });
@@ -532,6 +546,7 @@
         set('durationMin', 'Durata predefinita eventi (min)', 'number', { min: 15, step: 15 }),
         set('soglia', 'Soglia ricavi forfettario (€)', 'number', { min: 0, step: 1000 })),
       h('p', { class: 'note' }, 'Gli eventi esportati hanno un identificativo stabile: se li reimporti dopo averli modificati, il Calendario li aggiorna invece di duplicarli.'),
+      syncSection(),
       h('h3', {}, 'Backup dei dati'),
       h('p', { class: 'note' }, 'I dati stanno solo in questo dispositivo. Fai un backup ogni tanto, soprattutto prima di cambiare telefono o browser.'),
       h('div', { class: 'bar' },
@@ -540,8 +555,124 @@
       h('h3', {}, 'Altro'),
       h('div', { class: 'bar' },
         btn('Carica dati di esempio', () => { if (confirm('Aggiungere alcuni dati di esempio ai tuoi?')) { seedDemo(); toast('Dati di esempio aggiunti'); location.hash = '#/oggi'; route(); } }, ''),
-        btn('Cancella tutti i dati', () => { if (confirm('Cancellare TUTTI i dati? Operazione irreversibile.') && confirm('Sei sicuro? Hai fatto un backup?')) { db = normalize({}); save(); route(); toast('Dati cancellati'); } }, 'del sm')),
+        btn('Cancella tutti i dati', () => { if (confirm('Cancellare TUTTI i dati? Operazione irreversibile.') && confirm('Sei sicuro? Hai fatto un backup?')) { clearAll(); save(); route(); toast('Dati cancellati'); } }, 'del sm')),
       h('p', { class: 'note' }, 'Per installare l\'app: da Safari su iPhone “Condividi → Aggiungi a Home”; da Chrome “Installa app”.'));
+  }
+
+  /* ---------- Ripristino / cancellazione (coerenti con la sincronizzazione) ---------- */
+  function restoreFrom(o) {
+    const old = db; const now = new Date().toISOString(); const nd = normalize(o); const keep = new Set();
+    for (const ek of Object.keys(ENT)) for (const r of nd.data[ek]) { r.updated = now; keep.add(r.id); }
+    nd.meta = { lastPull: old.meta.lastPull, lastPush: '', lastSync: old.meta.lastSync, deleted: old.meta.deleted.filter((d) => !keep.has(d.id)) };
+    for (const ek of Object.keys(ENT)) if (synced(ek)) for (const r of old.data[ek]) if (!keep.has(r.id)) nd.meta.deleted.push({ id: r.id, entity: ek, updated: now });
+    db = nd;
+  }
+  function clearAll() {
+    for (const ek of Object.keys(ENT)) for (const r of rows(ek)) tombstone(ek, r.id);
+    db = normalize({ meta: db.meta });
+  }
+
+  /* ---------- Sincronizzazione (Supabase via REST, nessuna libreria) ---------- */
+  const SESS = KEY + ':session';
+  const ts = (s) => Date.parse(s) || 0;
+  const getSession = () => { try { return JSON.parse(localStorage.getItem(SESS)); } catch (e) { return null; } };
+  const setSession = (s) => { if (s) localStorage.setItem(SESS, JSON.stringify(s)); else localStorage.removeItem(SESS); };
+  let syncing = false, again = false, syncT;
+  function setStatus(txt, title) { const el = document.getElementById('sync'); if (el) { el.textContent = txt; el.title = title || ''; } }
+  const toSession = (j, email) => ({ access_token: j.access_token, refresh_token: j.refresh_token, expires_at: Math.floor(Date.now() / 1000) + (j.expires_in || 3600), email: email || (j.user && j.user.email) || '' });
+  async function authFetch(path, body) {
+    const res = await fetch(cfg.supabaseUrl + path, { method: 'POST', headers: { apikey: cfg.supabaseKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(j.error_description || j.msg || j.message || 'Errore ' + res.status), { http: true });
+    return j;
+  }
+  async function login(email, password) { setSession(toSession(await authFetch('/auth/v1/token?grant_type=password', { email, password }), email)); }
+  async function refresh() {
+    const s = getSession(); if (!s) throw new Error('Non collegato');
+    try { setSession(toSession(await authFetch('/auth/v1/token?grant_type=refresh_token', { refresh_token: s.refresh_token }), s.email)); }
+    catch (e) { if (e.http) { setSession(null); setStatus('☁️ Accedi', 'Sessione scaduta: accedi di nuovo'); } throw e; }
+  }
+  async function api(method, path, body, headers, retried) {
+    let s = getSession(); if (!s) throw new Error('Non collegato');
+    if (s.expires_at - 60 < Date.now() / 1000) { await refresh(); s = getSession(); }
+    const res = await fetch(cfg.supabaseUrl + path, { method, headers: Object.assign({ apikey: cfg.supabaseKey, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' }, headers), body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 401 && !retried) { await refresh(); return api(method, path, body, headers, true); }
+    if (!res.ok) throw new Error((await res.text()).slice(0, 200) || 'Errore ' + res.status);
+    return (res.headers.get('content-type') || '').includes('json') ? res.json() : null;
+  }
+  function applyRemote(r, pulled) {
+    if (!ENT[r.entity] || !synced(r.entity)) return false;
+    const list = rows(r.entity); const i = list.findIndex((x) => x.id === r.id); const rt = ts(r.updated);
+    if (i >= 0 && ts(list[i].updated) >= rt) return false;
+    const ti = db.meta.deleted.findIndex((d) => d.id === r.id);
+    if (ti >= 0) { if (ts(db.meta.deleted[ti].updated) >= rt) return false; db.meta.deleted.splice(ti, 1); }
+    if (r.deleted) { if (i >= 0) { list.splice(i, 1); return true; } return false; }
+    const rec = Object.assign({}, r.data, { id: r.id, updated: new Date(rt).toISOString() });
+    pulled[r.id] = rec.updated;
+    if (i >= 0) list[i] = rec; else list.push(rec);
+    return true;
+  }
+  async function syncNow(manual) {
+    if (!cfg.on || !getSession()) return;
+    if (syncing) { again = true; return; }
+    if (navigator.onLine === false) { setStatus('☁️ offline', 'Nessuna rete: sincronizzo appena torna'); return; }
+    syncing = true; setStatus('⏳', 'Sincronizzazione in corso…');
+    try {
+      let since = db.meta.lastPull, max = since, changed = false; const pulled = {};
+      for (;;) { // 1) scarica le novità (le modifiche più recenti vincono)
+        const q = '/rest/v1/records?select=id,entity,data,updated,deleted,synced_at&order=synced_at.asc&limit=1000' + (since ? '&synced_at=gte.' + encodeURIComponent(since) : '');
+        const batch = await api('GET', q);
+        for (const r of batch) { if (applyRemote(r, pulled)) changed = true; if (!max || ts(r.synced_at) > ts(max)) max = r.synced_at; }
+        if (batch.length < 1000 || max === since) break;
+        since = max;
+      }
+      db.meta.lastPull = max;
+      const t0 = new Date().toISOString(); const lp = ts(db.meta.lastPush); const out = []; // 2) invia le modifiche locali
+      for (const ek of Object.keys(ENT)) if (synced(ek)) for (const r of rows(ek)) if (ts(r.updated) > lp && pulled[r.id] !== r.updated) out.push({ id: r.id, entity: ek, data: r, updated: r.updated, deleted: false });
+      const tombs = db.meta.deleted.slice();
+      for (const d of tombs) out.push({ id: d.id, entity: d.entity, data: {}, updated: d.updated, deleted: true });
+      for (let i = 0; i < out.length; i += 200) await api('POST', '/rest/v1/records?on_conflict=id', out.slice(i, i + 200), { Prefer: 'resolution=merge-duplicates,return=minimal' });
+      db.meta.deleted = db.meta.deleted.filter((d) => !tombs.includes(d));
+      db.meta.lastPush = t0; db.meta.lastSync = new Date().toISOString();
+      setStatus('☁️ ✓', 'Sincronizzato alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
+      if (changed) route();
+    } catch (e) {
+      if (getSession()) setStatus('☁️ ⚠️', 'Sincronizzazione non riuscita: ' + e.message);
+      if (manual) toast('Sincronizzazione non riuscita: ' + e.message);
+    } finally {
+      persist(); syncing = false;
+      if (again) { again = false; setTimeout(() => syncNow(false), 500); }
+    }
+  }
+  function scheduleSync() { if (!cfg.on || !getSession()) return; clearTimeout(syncT); syncT = setTimeout(() => syncNow(false), 1500); }
+  function startSync() {
+    const el = document.getElementById('sync');
+    if (!cfg.on) { if (el) el.hidden = true; return; }
+    const go = () => (getSession() ? syncNow(true) : (location.hash = '#/impostazioni'));
+    el.addEventListener('click', go); el.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    window.addEventListener('online', () => syncNow(false));
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(false); });
+    setInterval(() => { if (document.visibilityState === 'visible') syncNow(false); }, 60000);
+    if (getSession()) syncNow(false); else setStatus('☁️ Accedi', 'Tocca per accedere e sincronizzare');
+  }
+  function syncSection() {
+    const box = h('div', {}, h('h3', {}, 'Sincronizzazione tra dispositivi'));
+    if (!cfg.on) { box.append(h('p', { class: 'note' }, 'Non attiva: mancano indirizzo e chiave del progetto in config.js (vedi README).')); return box; }
+    const s = getSession();
+    if (!s) {
+      const em = h('input', { type: 'email', id: 'sy-e', autocomplete: 'username' });
+      const pw = h('input', { type: 'password', id: 'sy-p', autocomplete: 'current-password' });
+      box.append(h('div', { class: 'set' }, h('div', { class: 'fld' }, h('label', { for: 'sy-e' }, 'Email'), em), h('div', { class: 'fld' }, h('label', { for: 'sy-p' }, 'Password'), pw)),
+        h('div', { class: 'bar' }, btn('Accedi e sincronizza', async () => {
+          try { await login(em.value.trim(), pw.value); toast('Accesso eseguito'); route(); await syncNow(true); } catch (e) { toast('Accesso non riuscito: ' + e.message); }
+        }, 'pri')));
+    } else {
+      box.append(h('p', { class: 'note' }, 'Collegato come ' + s.email + (db.meta.lastSync ? '. Ultima sincronizzazione: ' + new Date(db.meta.lastSync).toLocaleString('it-IT') : '') + '.'),
+        h('div', { class: 'bar' }, btn('🔄 Sincronizza ora', () => syncNow(true), 'pri'), btn('Esci', () => { setSession(null); setStatus('☁️ Accedi', 'Tocca per accedere'); route(); }, '')));
+    }
+    const loc = cfg.localOnly.map((k) => ENT[k] && ENT[k].label).filter(Boolean).join(', ');
+    if (loc) box.append(h('p', { class: 'note' }, 'Solo su questo dispositivo, mai sincronizzati: ' + loc + '.'));
+    return box;
   }
 
   /* ---------- Router ---------- */
@@ -559,7 +690,8 @@
   }
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); route(); });
   route();
+  startSync();
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
-  window.__gestionale = { route, get db() { return db; }, seedDemo, ENT };
+  window.__gestionale = { route, syncNow, login, getSession, get db() { return db; }, seedDemo, ENT };
 })();

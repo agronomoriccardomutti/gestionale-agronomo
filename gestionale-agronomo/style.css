@@ -57,3 +57,4 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 #toast.on{opacity:1}
 .set{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:8px}
 .note{color:var(--mut);font-size:14px}
+.sync{margin-left:auto;cursor:pointer;font-size:14px;color:var(--mut)}

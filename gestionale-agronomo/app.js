@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -37,6 +37,11 @@
   const STATI_PRATICA = ['Da avviare', 'In corso', 'In attesa', 'Consegnata', 'Chiusa'];
   const lab = (ek, id) => { const r = id && rows(ek).find((x) => x.id === id); return r ? ENT[ek].title(r) : ''; };
   const prodottiMagazzino = () => rows('magazzino').map((r) => r.prodotto).filter(Boolean);
+
+  const defParts = () => [{ id: 'p1', name: 'Vero o falso', max: 6 }, { id: 'p2', name: 'Risposta multipla', max: 6 },
+    { id: 'p3', name: 'Aperta 1', max: 8 }, { id: 'p4', name: 'Aperta 2', max: 8 }, { id: 'p5', name: 'Aperta 3', max: 8 }];
+  const maxTot = (v) => (v.parti || []).reduce((a, p) => a + (+p.max || 0), 0);
+  const fmt1 = (n) => new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
 
   const ENT = {
     parcelle: {
@@ -226,7 +231,41 @@
         { k: 'coordinatore', l: 'Sono il coordinatore', t: 'checkbox' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.nome + (r.scuola ? ' – ' + r.scuola : ''), cols: ['materia', 'ore', 'coordinatore'],
+      extra: (r) => { const n = rows('studenti').filter((x) => x.classe === r.id).length; return n ? [n + ' studenti'] : []; },
+      actions: [{ label: '👥 Studenti e voti', show: () => true, go: (r) => '#/scuola/classe/' + r.id }],
+      deleteWarn: 'Eliminare la classe, i suoi studenti, le verifiche e tutte le valutazioni?',
+      onDelete: (r) => {
+        const sids = new Set(rows('studenti').filter((x) => x.classe === r.id).map((x) => x.id));
+        const vids = new Set(rows('verifiche').filter((x) => x.classe === r.id).map((x) => x.id));
+        dropWhere('valutazioni', (x) => sids.has(x.studente) || vids.has(x.verifica));
+        dropWhere('studenti', (x) => x.classe === r.id); dropWhere('verifiche', (x) => x.classe === r.id);
+      },
     },
+    studenti: {
+      label: 'Studenti', one: 'studente', order: { k: 'nome', dir: 1 },
+      fields: [
+        { k: 'classe', l: 'Classe', t: 'ref', to: 'classi', req: 1 },
+        { k: 'nome', l: 'Cognome e nome', t: 'text', req: 1 },
+        { k: 'tag', l: 'H / DSA', t: 'select', opts: ['H', 'DSA'] }],
+      title: (r) => r.nome, cols: ['classe', 'tag'],
+    },
+    verifiche: {
+      label: 'Verifiche', one: 'verifica', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'classe', l: 'Classe', t: 'ref', to: 'classi', req: 1 },
+        { k: 'titolo', l: 'Verifica (es. V01T)', t: 'text', req: 1 },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'parti', l: 'Parti e punti massimi', t: 'parts' },
+        { k: 'vmin', l: 'Voto minimo (con 0 punti)', t: 'number', step: '0.5', def: 3 },
+        { k: 'vmax', l: 'Voto massimo (con tutti i punti)', t: 'number', step: '0.5', def: 9 },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => (r.titolo || 'Verifica') + (r.classe ? ' – ' + lab('classi', r.classe) : ''),
+      cols: ['data'],
+      extra: (r) => ['Totale ' + L.num(maxTot(r)) + ' punti · voto ' + fmt1(rng(r).min) + '–' + fmt1(rng(r).max)],
+      actions: [{ label: '✏️ Correggi', show: () => true, go: (r) => '#/scuola/correggi/' + r.id }],
+      onDelete: (r) => dropWhere('valutazioni', (x) => x.verifica === r.id),
+    },
+    valutazioni: { label: 'Valutazioni', one: 'valutazione', order: { k: 'updated', dir: -1 }, fields: [], title: () => 'Valutazione', cols: [] },
     impegni: {
       label: 'Impegni', one: 'impegno', order: { k: 'data', dir: 1 },
       fields: [
@@ -266,7 +305,7 @@
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'aziende'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
-    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi'] },
+    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
   ];
@@ -328,6 +367,7 @@
     if (f.t === 'date') return L.fmtDate(v);
     if (f.t === 'ref') return lab(f.to, v);
     if (f.t === 'checkbox') return v ? 'Sì' : '';
+    if (f.t === 'parts') return Array.isArray(v) ? v.map((p) => p.name + ' ' + p.max).join(', ') : '';
     if (f.t === 'number') return f.fmt === 'eur' ? L.eur(v) : L.num(v);
     return String(v);
   }
@@ -358,6 +398,15 @@
         el = h('select', { name: f.k }, h('option', { value: '' }, opts.length ? '—' : '(prima crea: ' + ENT[f.to].label.toLowerCase() + ')'),
           opts.map((o) => h('option', { value: o.id }, ENT[f.to].title(o))));
         el.value = val || '';
+      } else if (f.t === 'parts') {
+        const parts = (Array.isArray(val) && val.length ? val : defParts()).map((p) => Object.assign({}, p));
+        el = h('div', { class: 'parts' }); el.partsData = parts;
+        const draw = () => el.replaceChildren(...parts.map((p, i) => h('div', { class: 'part' },
+          h('input', { type: 'text', value: p.name, 'aria-label': 'Nome parte', oninput: (e) => { p.name = e.target.value; } }),
+          h('input', { type: 'number', step: '0.25', min: '0', value: p.max, 'aria-label': 'Punti massimi', oninput: (e) => { p.max = parseFloat(e.target.value.replace(',', '.')) || 0; } }),
+          btn('✕', () => { if (parts.length > 1) { parts.splice(i, 1); draw(); } }))),
+        btn('+ Aggiungi parte', () => { parts.push({ id: uid(), name: 'Parte ' + (parts.length + 1), max: 5 }); draw(); }));
+        draw();
       } else if (f.t === 'checkbox') { el = h('input', { type: 'checkbox', name: f.k }); el.checked = !!val; }
       else {
         el = h('input', { type: f.t === 'number' ? 'number' : f.t, name: f.k, step: f.step, inputmode: f.t === 'number' ? 'decimal' : null, autocomplete: 'off' });
@@ -374,8 +423,8 @@
     const close = () => dlg.close();
     form.append(h('div', { class: 'dlg-btns' },
       !isNew && h('button', { type: 'button', class: 'del', onclick: () => {
-        if (!confirm('Eliminare questo elemento?')) return;
-        tombstone(ek, r.id); db.data[ek] = rows(ek).filter((x) => x.id !== r.id); save(); close(); route(); toast('Eliminato');
+        if (!confirm(ent.deleteWarn || 'Eliminare questo elemento?')) return;
+        if (ent.onDelete) ent.onDelete(r); tombstone(ek, r.id); db.data[ek] = rows(ek).filter((x) => x.id !== r.id); save(); close(); route(); toast('Eliminato');
       } }, 'Elimina'),
       h('button', { type: 'button', onclick: close }, 'Annulla'),
       h('button', { type: 'submit', class: 'pri' }, 'Salva')));
@@ -383,7 +432,7 @@
       e.preventDefault();
       for (const f of ent.fields) {
         const el = inputs[f.k];
-        let v = f.t === 'checkbox' ? el.checked : el.value.trim();
+        let v = f.t === 'checkbox' ? el.checked : f.t === 'parts' ? el.partsData.map((p) => ({ id: p.id, name: String(p.name).trim() || 'Parte', max: Number(p.max) || 0 })) : el.value.trim();
         if (f.t === 'number') v = v === '' ? '' : Number(v);
         if (f.req && (v === '' || v == null)) { el.focus(); return toast('Compila: ' + f.l); }
         r[f.k] = v;
@@ -396,11 +445,11 @@
     dlg.append(form); dlg.showModal();
   }
 
-  function showText(title, text) {
+  function showText(title, text, note) {
     const dlg = document.getElementById('dlg'); dlg.replaceChildren();
     const ta = h('textarea', { readonly: true, style: 'min-height:220px' }); ta.value = text;
     dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, title), ta,
-      h('p', { class: 'note' }, 'Incolla nell\'app Promemoria: di norma crea una voce per ogni riga.'),
+      h('p', { class: 'note' }, note || 'Incolla nell\'app Promemoria: di norma crea una voce per ogni riga.'),
       h('div', { class: 'dlg-btns' },
         h('button', { type: 'button', onclick: () => dlg.close() }, 'Chiudi'),
         h('button', { type: 'button', class: 'pri', onclick: async () => {
@@ -423,6 +472,7 @@
       const y = year(); const l = rows('ispezioni').filter((r) => (r.data || '').startsWith(y));
       return [['Ispezioni ' + y, l.length], ['Km ' + y, L.num(sum(l, 'km'))], ['Compensi ' + y, L.eur(sum(l, 'compenso'))]];
     },
+    scuola: () => [['Classi', rows('classi').length], ['Studenti', rows('studenti').length], ['Verifiche', rows('verifiche').length]],
     professione: () => {
       const y = year(); const f = rows('fatture');
       const inc = sum(f.filter((r) => r.incassata && (r.dataIncasso || '').startsWith(y)), 'importo');
@@ -443,6 +493,7 @@
     h('div', { class: 'card-a' },
       next && relBadge(next.date),
       (ent.actions || []).filter((a) => a.show(r)).map((a) => btn(a.label, () => {
+        if (a.go) { location.hash = a.go(r); return; }
         const i = rows(ek).findIndex((x) => x.id === r.id); const copy = Object.assign({}, rows(ek)[i]);
         a.run(copy); copy.updated = new Date().toISOString(); rows(ek)[i] = copy; save(); route();
       })),
@@ -557,6 +608,139 @@
         btn('Carica dati di esempio', () => { if (confirm('Aggiungere alcuni dati di esempio ai tuoi?')) { seedDemo(); toast('Dati di esempio aggiunti'); location.hash = '#/oggi'; route(); } }, ''),
         btn('Cancella tutti i dati', () => { if (confirm('Cancellare TUTTI i dati? Operazione irreversibile.') && confirm('Sei sicuro? Hai fatto un backup?')) { clearAll(); save(); route(); toast('Dati cancellati'); } }, 'del sm')),
       h('p', { class: 'note' }, 'Per installare l\'app: da Safari su iPhone “Condividi → Aggiungi a Home”; da Chrome “Installa app”.'));
+  }
+
+  /* ---------- Scuola: studenti, verifiche e correzione ---------- */
+  const NOW = () => new Date().toISOString();
+  const rng = (v) => ({ min: v.vmin === '' || v.vmin == null ? 3 : +v.vmin, max: v.vmax === '' || v.vmax == null ? 9 : +v.vmax });
+  const studentsOf = (cid) => rows('studenti').filter((x) => x.classe === cid).sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+  const valOf = (vid, sid) => rows('valutazioni').find((x) => x.verifica === vid && x.studente === sid);
+  function dropWhere(ek, pred) { for (const x of rows(ek).filter(pred)) tombstone(ek, x.id); db.data[ek] = rows(ek).filter((x) => !pred(x)); }
+  function calcVal(v, val) {
+    const sc = (val && val.scores) || {}; let any = false, tot = 0;
+    for (const p of v.parti || []) { const x = sc[p.id]; if (typeof x === 'number' && isFinite(x)) { any = true; tot += Math.min(x, +p.max || 0); } }
+    const m = maxTot(v), r = rng(v);
+    const hyp = any && m > 0 ? r.min + tot / m * (r.max - r.min) : null;
+    const fin = val && typeof val.final === 'number' ? val.final : null;
+    return { any, tot, hyp, fin, eff: fin !== null ? fin : hyp };
+  }
+  const votoCls = (x) => (x === null ? 'na' : x >= 6 ? 'ok' : 'ko');
+  const votoEl = (x) => h('span', { class: 'voto ' + votoCls(x) }, x === null ? '—' : fmt1(x));
+
+  function viewClasse(id) {
+    const c = byId('classi', id);
+    if (!c) return h('div', { class: 'empty' }, 'Classe non trovata.');
+    const studs = studentsOf(id);
+    const vers = rows('verifiche').filter((v) => v.classe === id).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const ta = h('textarea', { id: 'paste', placeholder: 'Rossi Marco\nBianchi Giulia\n…' });
+    const addBox = h('div', { class: 'box' }, h('label', { for: 'paste' }, 'Aggiungi studenti: uno per riga (puoi incollare l\'elenco dal registro)'), ta,
+      h('div', { class: 'bar' }, btn('Aggiungi alla classe', () => {
+        const have = new Set(studs.map((x) => x.nome.toLowerCase())); let n = 0;
+        for (const raw of ta.value.split(/\r?\n/)) {
+          const nome = raw.trim(); if (!nome || have.has(nome.toLowerCase())) continue;
+          have.add(nome.toLowerCase()); rows('studenti').push({ id: uid(), classe: id, nome, tag: '', updated: NOW() }); n++;
+        }
+        if (!n) return toast('Nessun nuovo nome da aggiungere');
+        save(); route(); toast(n + ' studenti aggiunti');
+      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id }), '')));
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), h('h2', {}, '👥 ' + ENT.classi.title(c)), addBox);
+    if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Nessuno studente. Incolla l\'elenco qui sopra.')); return root; }
+    const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'),
+      vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data)))), h('th', {}, 'Media'), h('th', {}));
+    const body = studs.map((st) => {
+      let sum = 0, n = 0;
+      const cells = vers.map((v) => {
+        const val = valOf(v.id, st.id), cv = calcVal(v, val);
+        if (cv.eff !== null) { sum += cv.eff; n++; return h('td', {}, votoEl(cv.eff)); }
+        return h('td', { class: 'note' }, val && val.assente ? 'assente' : '—');
+      });
+      const sel = h('select', { 'aria-label': 'H o DSA di ' + st.nome, onchange: (e) => { st.tag = e.target.value; st.updated = NOW(); save(); } },
+        ['', 'H', 'DSA'].map((o) => h('option', { value: o }, o || '—')));
+      sel.value = st.tag || '';
+      return h('tr', {}, h('td', { class: 'nm' }, st.nome), h('td', {}, sel), cells, h('td', {}, n ? votoEl(sum / n) : '—'),
+        h('td', {}, btn('Elimina', () => {
+          if (!confirm('Eliminare ' + st.nome + ' e le sue valutazioni?')) return;
+          dropWhere('valutazioni', (x) => x.studente === st.id); dropWhere('studenti', (x) => x.id === st.id); save(); route();
+        })));
+    });
+    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));
+    return root;
+  }
+
+  function viewCorreggi(vid) {
+    const v = byId('verifiche', vid);
+    if (!v) return h('div', { class: 'empty' }, 'Verifica non trovata.');
+    const studs = studentsOf(v.classe), parts = v.parti || [], r = rng(v), m = maxTot(v);
+    const statsBox = h('div'); const refs = new Map();
+    const ensure = (sid) => {
+      let x = valOf(vid, sid);
+      if (!x) { x = { id: uid(), verifica: vid, studente: sid, scores: {}, final: '', assente: false, updated: NOW() }; rows('valutazioni').push(x); }
+      if (!x.scores) x.scores = {};
+      return x;
+    };
+    const renderStats = () => {
+      const all = studs.map((x) => calcVal(v, valOf(vid, x.id))), done = all.filter((x) => x.eff !== null);
+      const avg = done.length ? done.reduce((a, x) => a + x.eff, 0) / done.length : null;
+      const bk = [['< 5', 0, 5], ['5–5,9', 5, 6], ['6–6,9', 6, 7], ['7–7,9', 7, 8], ['8–10', 8, 11]];
+      const ko = done.filter((x) => x.eff < 6).length;
+      statsBox.replaceChildren(
+        tiles([['Corrette', done.length + ' / ' + studs.length], ['Media', avg === null ? '—' : fmt1(avg)], ['Insufficienti', ko, ko > 0], ['Voti finali', all.filter((x) => x.fin !== null).length + ' / ' + studs.length]]),
+        h('p', { class: 'note' }, 'Distribuzione: ' + bk.map((b) => b[0] + ': ' + done.filter((x) => x.eff >= b[1] && x.eff < b[2]).length).join(' · ')));
+    };
+    const updateRow = (st) => {
+      const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
+      t.tot.textContent = cv.any ? fmt1(cv.tot) : ''; t.hyp.replaceChildren(votoEl(cv.hyp));
+    };
+    const head = h('tr', {}, h('th', {}, 'Studente'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
+      h('th', {}, 'Punti', h('div', { class: 'note' }, '/ ' + L.num(m))), h('th', {}, 'Voto ipotetico'), h('th', {}, 'Voto finale'));
+    const body = studs.map((st) => {
+      const val = valOf(vid, st.id) || {}, ass = !!val.assente;
+      const tot = h('td', { class: 'tot' }), hyp = h('td'); refs.set(st.id, { tot, hyp });
+      const rec = h('input', { type: 'date', class: 'rec', 'aria-label': 'Data recupero di ' + st.nome, value: val.rec || '',
+        onchange: (e) => { const x = ensure(st.id); x.rec = e.target.value; x.updated = NOW(); save(); } });
+      const nm = h('td', { class: 'nm' }, st.nome + (st.tag ? ' (' + st.tag + ')' : ''),
+        h('div', {}, btn(ass ? 'Assente' : 'Presente', () => { const x = ensure(st.id); x.assente = !x.assente; x.updated = NOW(); save(); route(); }), ass && rec));
+      const pc = parts.map((p) => {
+        const inp = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.25', min: '0', max: String(p.max), 'aria-label': p.name + ' di ' + st.nome });
+        if (val.scores && typeof val.scores[p.id] === 'number') inp.value = val.scores[p.id];
+        inp.addEventListener('input', () => {
+          const raw = inp.value.replace(',', '.'), x = ensure(st.id);
+          if (raw === '') delete x.scores[p.id]; else { const n = parseFloat(raw); if (isFinite(n) && n >= 0) x.scores[p.id] = n; }
+          inp.classList.toggle('over', typeof x.scores[p.id] === 'number' && x.scores[p.id] > p.max);
+          x.updated = NOW(); save(); updateRow(st); renderStats();
+        });
+        inp.addEventListener('change', () => {
+          const x = valOf(vid, st.id);
+          if (x && x.scores[p.id] > p.max) { x.scores[p.id] = +p.max; inp.value = p.max; inp.classList.remove('over'); x.updated = NOW(); save(); updateRow(st); renderStats(); }
+        });
+        return h('td', {}, inp);
+      });
+      const fin = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '10', 'aria-label': 'Voto finale di ' + st.nome });
+      if (typeof val.final === 'number') fin.value = val.final;
+      fin.addEventListener('input', () => {
+        const raw = fin.value.replace(',', '.'), x = ensure(st.id);
+        if (raw === '') x.final = ''; else { const n = parseFloat(raw); if (isFinite(n) && n >= 0) x.final = Math.min(n, 10); }
+        x.updated = NOW(); save(); updateRow(st); renderStats();
+      });
+      return h('tr', {}, nm, pc, tot, hyp, h('td', {}, fin));
+    });
+    const copy = () => {
+      const lines = [['Classe', 'Verifica', 'Studente'].concat(parts.map((p) => p.name), ['Punti', 'Voto ipotetico', 'Voto finale']).join('\t')];
+      for (const st of studs) {
+        const val = valOf(vid, st.id) || {}, cv = calcVal(v, val), sc = val.scores || {};
+        lines.push([lab('classi', v.classe), v.titolo || '', st.nome].concat(parts.map((p) => (typeof sc[p.id] === 'number' ? String(sc[p.id]).replace('.', ',') : '')),
+          [cv.any ? String(cv.tot).replace('.', ',') : '', cv.hyp === null ? '' : fmt1(cv.hyp), cv.fin === null ? '' : fmt1(cv.fin)]).join('\t'));
+      }
+      showText('Risultati della verifica', lines.join('\n'), 'Copia e incolla nel registro o in un foglio di calcolo.');
+    };
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), h('h2', {}, '✏️ ' + ENT.verifiche.title(v)),
+      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
+      h('div', { class: 'bar' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('Copia risultati', copy, ''),
+        h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe')), statsBox);
+    if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }
+    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));
+    studs.forEach(updateRow); renderStats();
+    return root;
   }
 
   /* ---------- Ripristino / cancellazione (coerenti con la sincronizzazione) ---------- */
@@ -681,12 +865,13 @@
   }
   let lastMod = '';
   function route() {
-    const [, id = 'oggi', ek] = (location.hash || '#/oggi').split('/');
+    const [, id = 'oggi', ek, arg] = (location.hash || '#/oggi').split('/');
     const mod = MODS.find((m) => m.id === id) || MODS[0];
     if (lastMod !== mod.id + '/' + (ek || '')) { ui.q = ''; lastMod = mod.id + '/' + (ek || ''); }
     renderNav(mod.id);
     const app = document.getElementById('app');
-    app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni() : viewModule(mod, ek));
+    app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : viewModule(mod, ek));
   }
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); route(); });
   route();

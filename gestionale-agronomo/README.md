@@ -52,6 +52,17 @@ npm test                        # test della libreria date/iCalendar (Node ≥ 1
 
 Quando pubblichi una modifica ai file, cambia il numero in `CACHE` dentro `sw.js` (es. `gestionale-v2`) per forzare l'aggiornamento sui dispositivi.
 
+## Sincronizzazione tra dispositivi (facoltativa)
+
+Con un progetto gratuito [Supabase](https://supabase.com) i dati si allineano da soli tra Mac e iPhone. L'app resta usabile offline: le modifiche partono appena torna la rete.
+
+1. Crea un progetto Supabase (regione europea) e, nel **SQL Editor**, esegui il contenuto di `supabase/setup.sql`.
+2. In **Authentication → Users** aggiungi il tuo utente (email + password, “Auto confirm”). Poi in **Authentication → Sign In / Providers** disattiva le nuove registrazioni, così solo tu puoi entrare.
+3. In **Project Settings → API** copia *Project URL* e la chiave *anon / publishable* dentro `config.js`.
+4. Nell'app: **Impostazioni → Sincronizzazione → Accedi**. Poi l'icona ☁️ in alto mostra lo stato.
+
+Regole: vince la modifica più recente; le cancellazioni si propagano. Le schede elencate in `localOnly` (di default **le fatture**) non vengono mai inviate online. L'indirizzo e la chiave `anon` sono pubblici per progetto: i dati sono protetti dall'accesso con password e dalle regole di sicurezza della tabella.
+
 ## Backup
 
 `Impostazioni → Esporta backup`. I dati sono in un solo dispositivo: fai il backup ogni tanto, e **prima** di cambiare telefono o browser. Il file si ripristina da `Impostazioni → Ripristina da backup`.
@@ -60,6 +71,7 @@ Quando pubblichi una modifica ai file, cambia il numero in `CACHE` dentro `sw.js
 
 ```
 index.html  style.css  app.js  lib.js  sw.js  manifest.webmanifest
+config.js   supabase/setup.sql
 icons/      tests/lib.test.js    .github/workflows/ci.yml
 ```
 
@@ -68,3 +80,10 @@ icons/      tests/lib.test.js    .github/workflows/ci.yml
 ## Licenza
 
 MIT — vedi `LICENSE`.
+
+## Scuola: classi, verifiche e voti
+
+- **Classi** → pulsante *Studenti e voti*: incolla l'elenco (uno per riga), segna H/DSA, vedi la tabella voti e la media.
+- **Verifiche**: crea una verifica per classe con le parti e i punti massimi e l'intervallo dei voti (default 3–9).
+- **Correggi**: inserisci i punti per parte; voto ipotetico = voto min + punti ÷ totale × (voto max − voto min). Il voto finale facoltativo prevale. Presente/assente con data di recupero, statistiche e *Copia risultati* (TSV).
+- Studenti e valutazioni restano **solo sul dispositivo** (`localOnly` in `config.js`); per spostarli usa il backup in Impostazioni.

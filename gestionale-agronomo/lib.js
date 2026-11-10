@@ -86,5 +86,108 @@
     return events.map((e) => e.title + ' — ' + fmtDate(e.date) + (e.time ? ' ' + e.time : '')).join('\n');
   }
 
-  return { iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+
+  /* ---------- Lettura .xlsx (senza librerie) e Modello 22 EcoGruppo ---------- */
+  async function inflateRaw(bytes) {
+    const ds = new DecompressionStream('deflate-raw');
+    const w = ds.writable.getWriter(); w.write(bytes); w.close();
+    return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+  }
+  async function unzip(buf) {
+    const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let e = -1;
+    for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+    if (e < 0) throw new Error('File non valido (non è un .xlsx)');
+    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true);
+    const out = {}; const dec = new TextDecoder();
+    for (let i = 0; i < n; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+      const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+      const name = dec.decode(b.subarray(p + 46, p + 46 + nl));
+      p += 46 + nl + xl + cl;
+      if (!/^xl\/(sharedStrings\.xml|worksheets\/[^/]+\.xml)$/.test(name)) continue;
+      const start = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true);
+      const raw = b.subarray(start, start + csize);
+      out[name] = dec.decode(method === 0 ? raw : await inflateRaw(raw));
+    }
+    return out;
+  }
+  const unxml = (t) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (m, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (m, d) => String.fromCodePoint(parseInt(d, 16))).replace(/&amp;/g, '&');
+  const textOf = (xml) => { let o = ''; xml.replace(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g, (m, t) => { o += t; return m; }); return unxml(o); };
+  /* -> { 'B8': 'testo', 'A8': 1, ... } */
+  async function xlsxCells(buf) {
+    const files = await unzip(buf);
+    const sheetName = files['xl/worksheets/sheet1.xml'] ? 'xl/worksheets/sheet1.xml' : Object.keys(files).filter((k) => k.indexOf('worksheets/') > 0).sort()[0];
+    if (!sheetName) throw new Error('Foglio non trovato nel file');
+    const ss = []; (files['xl/sharedStrings.xml'] || '').replace(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g, (m, x) => { ss.push(textOf(x)); return m; });
+    const cells = {};
+    files[sheetName].replace(/<c\s([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (m, attrs, inner) => {
+      const ref = /\br="([A-Z]+\d+)"/.exec(attrs); if (!ref || !inner) return m;
+      const t = (/\bt="(\w+)"/.exec(attrs) || [])[1];
+      const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
+      let val = null;
+      if (t === 'inlineStr') val = textOf(inner);
+      else if (v && t === 's') val = ss[+v[1]];
+      else if (v && t === 'str') val = unxml(v[1]);
+      else if (v) val = isNaN(+v[1]) ? unxml(v[1]) : +v[1];
+      if (val !== null && val !== '') cells[ref[1]] = val;
+      return m;
+    });
+    return cells;
+  }
+  const titleCase = (s) => (s === s.toUpperCase() && /[A-Z]/.test(s) ? s.toLowerCase().replace(/(^|[\s.'(\-])([a-zà-ú])/g, (m, a, c) => a + c.toUpperCase()) : s);
+  function splitOperatore(raw) {
+    const t = String(raw).replace(/\s+/g, ' ').trim();
+    const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(t);
+    return m ? { ragione: titleCase(m[1].trim()), comune: m[2].trim() } : { ragione: titleCase(t), comune: '' };
+  }
+  const clean = (v) => (v == null ? '' : String(v).replace(/\s+/g, ' ').trim());
+  /* Estrae operatori e intestazione dal Modello 22 (MD 022) di EcoGruppo. */
+  function parseModello22(cells) {
+    const keys = Object.keys(cells), rowOf = (k) => +k.replace(/\D/g, ''), col = (k) => k.replace(/\d/g, '');
+    const hdr = keys.find((k) => col(k) === 'C' && /Cod\.?\s*Op/i.test(clean(cells[k])) && clean(cells['B' + rowOf(k)]) === 'Operatori');
+    if (!hdr) throw new Error('Non sembra un Modello 22 (manca la tabella Operatori)');
+    const h0 = rowOf(hdr), out = { trimestre: '', quarter: null, controllore: '', consegna: '', operatori: [] };
+    const intest = clean(cells.C5);
+    const q = /(\d)\s*['’´`°]?\s*-\s*(\d{2})\b/.exec(intest);
+    if (q) { out.quarter = { n: +q[1], y: 2000 + +q[2] }; out.trimestre = q[1] + '° trim. ' + (2000 + +q[2]); }
+    out.controllore = clean(cells.H5);
+    for (let r = h0 + 1; r < h0 + 60; r++) {
+      const nome = clean(cells['B' + r]), cod = clean(cells['C' + r]);
+      if (!nome) { if (clean(cells['A' + r]).indexOf('Tabella 2') === 0) break; continue; }
+      if (!cod) continue;
+      const sp = splitOperatore(nome);
+      out.operatori.push(Object.assign(sp, { codice: cod, tipologia: clean(cells['D' + r]), campionamento: [clean(cells['E' + r]), clean(cells['F' + r])].filter(Boolean).join(' – '), note: clean(cells['G' + r]) }));
+    }
+    for (const k of keys) { const m = /Luogo e data:\s*\S+\s+(\d{1,2})[_\-\/.](\d{1,2})[_\-\/.](\d{4})/.exec(clean(cells[k])); if (m && !out.consegna) out.consegna = m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]); }
+    return out;
+  }
+  const quarterEnd = (q) => (q ? iso(new Date(q.y, q.n * 3, 0)) : '');
+  function tipoDaNote(note) {
+    if (/non\s+annunciat/i.test(note)) return 'A sorpresa';
+    if (/aggiuntiv/i.test(note)) return 'Supplementare';
+    return 'Annuale';
+  }
+  /* Unisce più Modelli 22 (stesso trimestre, versioni/integrazioni) per codice operatore. */
+  function mergeModelli(list) {
+    const by = new Map(), res = { trimestre: '', quarter: null, operatori: [] };
+    list.forEach((m, i) => {
+      if (!res.trimestre && m.trimestre) { res.trimestre = m.trimestre; res.quarter = m.quarter; }
+      for (const o of m.operatori) {
+        const cur = by.get(o.codice.toUpperCase());
+        if (!cur) { const c = Object.assign({}, o, { files: [i + 1] }); by.set(o.codice.toUpperCase(), c); res.operatori.push(c); continue; }
+        cur.files.push(i + 1);
+        if (o.note && cur.note.indexOf(o.note) < 0) cur.note = (cur.note ? cur.note + ' | ' : '') + o.note;
+        if (o.campionamento && !cur.campionamento) cur.campionamento = o.campionamento;
+        if (!cur.comune && o.comune) cur.comune = o.comune;
+      }
+    });
+    return res;
+  }
+  const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9à-ú]/g, '');
+
+  return { xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

@@ -138,6 +138,8 @@
       label: 'Aziende', one: 'azienda', order: { k: 'ragione', dir: 1 },
       fields: [
         { k: 'ragione', l: 'Ragione sociale', t: 'text', req: 1 },
+        { k: 'codice', l: 'Cod. operatore (EcoGruppo)', t: 'text' },
+        { k: 'tipologia', l: 'Tipologia operatore', t: 'text', list: ['A', 'AB'] },
         { k: 'comune', l: 'Comune / località', t: 'text' },
         { k: 'cuaa', l: 'CUAA / P.IVA', t: 'text' },
         { k: 'referente', l: 'Referente', t: 'text' },
@@ -145,7 +147,7 @@
         { k: 'colture', l: 'Colture / attività', t: 'text' },
         { k: 'scadCert', l: 'Scadenza certificato', t: 'date' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => r.ragione, cols: ['comune', 'referente', 'telefono', 'scadCert'],
+      title: (r) => r.ragione, cols: ['codice', 'comune', 'referente', 'telefono', 'scadCert'],
       events: (r) => (r.scadCert ? [{ date: r.scadCert, info: 1, title: 'Scade certificato: ' + r.ragione }] : []),
     },
     ispezioni: {
@@ -157,12 +159,14 @@
         { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Annuale', 'Supplementare', 'A sorpresa', 'Controllo documentale'] },
         { k: 'norma', l: 'Norma / schema', t: 'select', opts: ['Reg. UE 848/2018', 'SQNPI', 'Altro'] },
         { k: 'stato', l: 'Stato', t: 'select', opts: ['Programmata', 'Eseguita', 'Verbale da consegnare', 'Chiusa'], def: 'Programmata', req: 1 },
+        { k: 'trimestre', l: 'Trimestre (Modello 22)', t: 'text' },
+        { k: 'campionamento', l: 'Campionamento', t: 'text' },
         { k: 'scadVerbale', l: 'Scadenza consegna verbale', t: 'date' },
         { k: 'km', l: 'Km percorsi', t: 'number', step: '1' },
         { k: 'compenso', l: 'Compenso (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.azienda ? lab('aziende', r.azienda) : 'Ispezione'),
-      cols: ['data', 'tipo', 'norma', 'stato'],
+      cols: ['data', 'tipo', 'norma', 'stato', 'trimestre'],
       isDone: (r) => r.stato === 'Chiusa',
       events: (r) => {
         const az = r.azienda ? lab('aziende', r.azienda) : '';
@@ -458,6 +462,64 @@
     dlg.showModal();
   }
 
+  /* ---------- Importa Modello 22 (EcoGruppo) ---------- */
+  function openImport22() {
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const status = h('p', { class: 'note' }, 'Scegli uno o più file .xlsx del Modello 22 (anche le integrazioni dello stesso trimestre).');
+    const fileIn = h('input', { type: 'file', accept: '.xlsx', multiple: true });
+    const prev = h('div'); const btns = h('div', { class: 'dlg-btns' });
+    let state = null;
+    const close = () => dlg.close();
+    const findAz = (o) => rows('aziende').find((a) => (a.codice && a.codice.toUpperCase() === o.codice.toUpperCase()) || L.normName(a.ragione) === L.normName(o.ragione));
+    const draw = () => {
+      const tri = h('input', { type: 'text', value: state.trimestre });
+      const lim = h('input', { type: 'date', value: state.limite });
+      const checks = [];
+      const trs = state.ops.map((o) => {
+        const az = findAz(o);
+        const dup = az && rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === state.trimestre);
+        const cb = h('input', { type: 'checkbox', 'aria-label': 'Importa ' + o.ragione }); cb.checked = !dup; cb.disabled = !!dup; checks.push([cb, o]);
+        return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, o.ragione, h('div', { class: 'note' }, [o.comune, o.codice, o.tipologia].filter(Boolean).join(' · '))),
+          h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'ispezione già presente' : az ? 'cliente esistente' : 'NUOVO cliente'));
+      });
+      const nuovi = state.ops.filter((o) => !findAz(o)).length;
+      status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi importare.';
+      prev.replaceChildren(
+        h('div', { class: 'fld' }, h('label', {}, 'Trimestre'), tri), h('div', { class: 'fld' }, h('label', {}, 'Data provvisoria ispezioni (poi la aggiorni per ciascuna)'), lim),
+        h('div', { class: 'scroll', style: 'max-height:40vh' }, h('table', { class: 'g', style: 'min-width:0' }, h('tbody', {}, trs))));
+      btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Annulla'),
+        h('button', { type: 'button', class: 'pri', onclick: () => {
+          const sel = checks.filter(([cb]) => cb.checked).map(([, o]) => o);
+          if (!sel.length) return toast('Nessun operatore selezionato');
+          if (!lim.value) return toast('Indica la data provvisoria');
+          let na = 0, ni = 0; const now = NOW();
+          for (const o of sel) {
+            let az = findAz(o);
+            if (!az) { az = { id: uid(), ragione: o.ragione, comune: o.comune, codice: o.codice, tipologia: o.tipologia, updated: now }; rows('aziende').push(az); na++; }
+            else { if (!az.codice) az.codice = o.codice; if (!az.tipologia) az.tipologia = o.tipologia; if (!az.comune && o.comune) az.comune = o.comune; az.updated = now; }
+            if (rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === tri.value.trim())) continue;
+            rows('ispezioni').push({ id: uid(), data: lim.value, azienda: az.id, tipo: L.tipoDaNote(o.note), norma: 'Reg. UE 848/2018', stato: 'Programmata',
+              trimestre: tri.value.trim(), campionamento: o.campionamento, note: o.note, updated: now }); ni++;
+          }
+          save(); close(); route(); toast(ni + ' ispezioni create, ' + na + ' nuovi clienti');
+        } }, 'Importa'));
+    };
+    fileIn.addEventListener('change', async () => {
+      try {
+        if (typeof DecompressionStream === 'undefined') throw new Error('Browser troppo vecchio: aggiorna iOS/Safari');
+        const ms = [];
+        for (const f of fileIn.files) ms.push(L.parseModello22(await L.xlsxCells(await f.arrayBuffer())));
+        if (!ms.length) return;
+        const m = L.mergeModelli(ms);
+        state = { ops: m.operatori, trimestre: m.trimestre, limite: L.quarterEnd(m.quarter), nfile: ms.length };
+        draw();
+      } catch (e) { status.textContent = 'Errore: ' + e.message; prev.replaceChildren(); btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Chiudi')); }
+    });
+    btns.append(h('button', { type: 'button', onclick: close }, 'Annulla'));
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📥 Importa Modello 22'), fileIn, status, prev, btns));
+    dlg.showModal();
+  }
+
   /* ---------- Viste ---------- */
   const ui = { q: '', showDone: false };
   const tile = (l, v, bad) => h('div', { class: 'tile' + (bad ? ' bad' : '') }, h('b', {}, v), h('span', {}, l));
@@ -526,6 +588,7 @@
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
+      mod.id === 'ispezioni' && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
       viewList(ek));
   }

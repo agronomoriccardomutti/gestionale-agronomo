@@ -6,6 +6,6 @@
   "private": true,
   "scripts": {
     "start": "python3 -m http.server 8080",
-    "test": "node --test tests/lib.test.js"
+    "test": "node --test tests/lib.test.js tests/modello22.test.js"
   }
 }

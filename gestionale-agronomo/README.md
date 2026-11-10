@@ -87,3 +87,7 @@ MIT — vedi `LICENSE`.
 - **Verifiche**: crea una verifica per classe con le parti e i punti massimi e l'intervallo dei voti (default 3–9).
 - **Correggi**: inserisci i punti per parte; voto ipotetico = voto min + punti ÷ totale × (voto max − voto min). Il voto finale facoltativo prevale. Presente/assente con data di recupero, statistiche e *Copia risultati* (TSV).
 - Studenti e valutazioni restano **solo sul dispositivo** (`localOnly` in `config.js`); per spostarli usa il backup in Impostazioni.
+
+## Ispezioni: importa il Modello 22 (EcoGruppo)
+
+In **Ispezioni** premi *Importa Modello 22* e scegli uno o più file `.xlsx` (versioni e integrazioni dello stesso trimestre). L'app unisce gli operatori per codice, crea i clienti nuovi (codice e tipologia compresi) e un'ispezione *Programmata* per ciascuno. Il tipo viene ricavato dalle note: "Non annunciata" → A sorpresa, "Aggiuntiva" → Supplementare, altrimenti Annuale. Prima di confermare puoi togliere la spunta a chi non vuoi importare. Rilanciando l'importazione non si creano doppioni (stessa azienda e stesso trimestre).

@@ -1,0 +1,11 @@
+{
+  "name": "gestionale-agronomo",
+  "version": "1.0.0",
+  "description": "PWA personale: campagna, cascina, ispezioni, professione, scuola",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/lib.test.js"
+  }
+}

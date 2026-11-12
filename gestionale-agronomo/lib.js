@@ -177,6 +177,7 @@
     else { const q = /\b([1-4])\s*[°º^]?\s*(?:trim|tr\b)/.exec(t); if (q) n = +q[1]; }
     return n ? { n, y: y ? +y : (yearHint || new Date().getFullYear()) } : null;
   }
+  const quarterStart = (q) => (q ? iso(new Date(q.y, (q.n - 1) * 3, 1)) : '');
   const quarterEnd = (q) => (q ? iso(new Date(q.y, q.n * 3, 0)) : '');
   function tipoDaNote(note) {
     if (/non\s+annunciat/i.test(note)) return 'A sorpresa';
@@ -208,8 +209,9 @@
   const r2 = (x) => Math.round(x * 100) / 100;
   function notaCalc(r) {
     const kmTot = (+r.km || 0) + (+r.kmExtra || 0), speseKm = r2(kmTot * KM_EURO), altre = +r.altre || 0;
-    const compenso = TARIFFE[r.complessita] == null ? null : TARIFFE[r.complessita];
-    return { kmTot, speseKm, altre, compenso, totale: r.complessita ? r2(speseKm + altre + (compenso || 0)) : null };
+    const hasImp = r.importo !== undefined && r.importo !== null && r.importo !== '' && isFinite(+r.importo);
+    const compenso = hasImp ? +r.importo : (TARIFFE[r.complessita] == null ? null : TARIFFE[r.complessita]);
+    return { kmTot, speseKm, altre, compenso, totale: compenso == null ? null : r2(speseKm + altre + compenso) };
   }
   function periodoLabel(dal, al) {
     const M = ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'];
@@ -278,8 +280,10 @@
           case 'L': return txt(has ? d.complessita : '');
           case 'I': return '<c r="' + ref + '"' + S + '>' + f + num(has ? c.kmTot : 0) + '</c>';
           case 'J': return '<c r="' + ref + '"' + S + '>' + f + num(has ? c.speseKm : 0) + '</c>';
-          case 'M': return has && c.compenso != null ? '<c r="' + ref + '"' + S + '>' + f + num(c.compenso) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v xml:space="preserve"> </v></c>';
-          case 'N': return has && c.totale != null ? '<c r="' + ref + '"' + S + '>' + f + num(c.totale) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v></v></c>';
+          case 'M': { const fixed = has && c.compenso != null && TARIFFE[d.complessita] !== c.compenso; // importo diverso dalla tariffa: valore fisso al posto della formula
+            return has && c.compenso != null ? '<c r="' + ref + '"' + S + '>' + (fixed ? '' : f) + num(c.compenso) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v xml:space="preserve"> </v></c>'; }
+          case 'N': { const fixed = has && c.totale != null && TARIFFE[d.complessita] !== c.compenso;
+            return has && c.totale != null ? '<c r="' + ref + '"' + S + '>' + (fixed ? '' : f) + num(c.totale) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v></v></c>'; }
           default: return m;
         }
       }));
@@ -295,5 +299,5 @@
     return zipStore(files);
   }
 
-  return { TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+  return { quarterStart, TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

@@ -99,3 +99,18 @@ In **Ispezioni** premi *Importa Modello 22* e scegli uno o più file `.xlsx` (ve
 ### Nota spese ispettori
 
 In **Ispezioni → Nota spese** scegli il periodo: compaiono le ispezioni eseguite con partenza, destinazione, km, km extra, altre spese e complessità (il compenso si calcola: Basso 80 · Medio 90 · Alto 110 · Altro combinato 40 · Altro singolo 70; km a 0,30 €). *Scarica Excel* compila il modello EcoGruppo (`nota-template.js`, vuoto) con le formule originali. Il luogo di partenza predefinito si cambia in Impostazioni.
+
+## Calendario e Promemoria Apple
+
+**Calendario (automatico).** Una sola volta, in Supabase → SQL Editor, incolla ed esegui `supabase/calendario.sql`. Poi in app: Impostazioni → *Calendario Apple* → *Attiva abbonamento* → *Abbonati in Calendario*. L'app pubblica a ogni sincronizzazione un file `.ics` con le scadenze aperte (esclusi i dati solo locali, come le fatture) e Calendario lo rilegge da solo.
+Il link contiene il tuo id utente (impossibile da indovinare) ma è leggibile da chi lo conosce: non condividerlo.
+
+**Promemoria.** iOS non permette a una pagina web di scrivere direttamente nei Promemoria. Il pulsante *Invia a Promemoria* (Oggi) passa l'elenco a un Comando Rapido "Scadenze in Promemoria" che crea un promemoria per ogni riga (istruzioni nella finestra, un minuto una sola volta). In alternativa *Condividi* o *Copia*.
+
+
+## Ispezioni: periodi, Modello 22, schede azienda
+
+- **Periodi**: tabella dei trimestri con Totale, Totale ispezioni, Totale rimborso e 20%. Clic su una riga per aprire il periodo.
+- **Importa Modello 22**: carica uno o più .xlsx, sceglie/crea il periodo e porta le aziende nel periodo (nuovi clienti creati in automatico). Le ispezioni nascono solo quando si spunta l'azienda.
+- **Pagina periodo**: spunta le aziende da ispezionare; per ognuna Organizzazione (Programmata/Svolta/Verbale da consegnare/Chiusa), Data, Pagamento, Km, Autostrada, Complessità e Importo. Sotto: 20% del Totale, EPAP 4% (se attivato), Da accantonare (= somma rimborso km). Scarica la Nota spese Excel con le ispezioni non più "Programmata".
+- **Scheda azienda**: dati, ispezioni collegate e Modello 44.

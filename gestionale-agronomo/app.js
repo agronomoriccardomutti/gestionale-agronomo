@@ -137,25 +137,55 @@
     aziende: {
       label: 'Aziende', one: 'azienda', order: { k: 'ragione', dir: 1 },
       fields: [
-        { k: 'ragione', l: 'Ragione sociale', t: 'text', req: 1 },
-        { k: 'codice', l: 'Cod. operatore (EcoGruppo)', t: 'text' },
-        { k: 'comune', l: 'Comune / località', t: 'text' },
+        { k: 'ragione', l: 'Operatore', t: 'text', req: 1 },
+        { k: 'codice', l: 'Codice operatore', t: 'text' },
+        { k: 'importo', l: 'Importo ispezione (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'email', l: 'Email', t: 'email' },
+        { k: 'fisso', l: 'Fisso', t: 'tel' },
         { k: 'telefono', l: 'Telefono', t: 'tel' },
+        { k: 'ubicazione', l: 'Ubicazione', t: 'text' },
+        { k: 'comune', l: 'Comune', t: 'text' },
+        { k: 'provincia', l: 'Provincia', t: 'text' },
+        { k: 'tecnico', l: 'Tecnico', t: 'text' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.ragione, cols: ['codice', 'comune', 'telefono'],
+      detail: (r) => '#/ispezioni/azienda/' + r.id,
+      onDelete: (r) => { dropWhere('piano', (x) => x.azienda === r.id); dropWhere('modello44', (x) => x.azienda === r.id); },
     },
-    nota: { label: 'Nota spese', one: 'nota spese', order: { k: 'updated', dir: -1 }, fields: [], title: () => 'Nota spese', cols: [] },
-    piano: { label: 'Piano trimestre', one: 'voce del piano', order: { k: 'updated', dir: -1 }, fields: [], title: (r) => lab('aziende', r.azienda), cols: [] },
+    modello44: {
+      label: 'Modello 44', one: 'Modello 44', order: { k: 'numero', dir: 1 },
+      fields: [
+        { k: 'azienda', l: 'Azienda', t: 'ref', to: 'aziende', req: 1 },
+        { k: 'numero', l: 'Numero', t: 'text' },
+        { k: 'ncChiuse', l: 'Le NC precedenti sono state chiuse?', t: 'select', opts: ['Sì', 'No', 'Nessuna NC'] },
+        { k: 'esito', l: 'Esito controllo', t: 'text', list: ['Positivo', 'Negativo', 'Con NC'] },
+        { k: 'variazione', l: 'Variazione nello status di conversione dell\'azienda?', t: 'select', opts: ['Sì', 'No'] },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => 'Modello 44 ' + (r.numero || '') + (r.azienda ? ' – ' + lab('aziende', r.azienda) : ''), cols: ['ncChiuse', 'esito'],
+    },
+    periodi: {
+      label: 'Periodi', one: 'periodo', order: { k: 'avvio', dir: -1 },
+      fields: [
+        { k: 'anno', l: 'Anno lavorativo', t: 'number', step: '1', req: 1 },
+        { k: 'avvio', l: 'Avvio trimestre', t: 'date', req: 1 },
+        { k: 'chiusura', l: 'Chiusura trimestre', t: 'date', req: 1 },
+        { k: 'epap', l: 'Applica EPAP 4% sugli importi delle ispezioni', t: 'checkbox' }],
+      title: (r) => (r.anno || '') + ' · ' + L.fmtDate(r.avvio) + ' – ' + L.fmtDate(r.chiusura), cols: ['anno', 'avvio', 'chiusura'],
+      onDelete: (r) => { dropWhere('piano', (x) => x.periodo === r.id); dropWhere('ispezioni', (x) => x.periodo === r.id); },
+    },
+    piano: { label: 'Piano', one: 'voce del piano', order: { k: 'updated', dir: -1 }, fields: [], title: (r) => lab('aziende', r.azienda), cols: [] },
     ispezioni: {
-      label: 'Ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
+      label: 'Tutte le ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
       fields: [
         { k: 'data', l: 'Data ispezione', t: 'date', req: 1, def: 'today' },
         { k: 'ora', l: 'Ora', t: 'time' },
         { k: 'azienda', l: 'Azienda', t: 'ref', to: 'aziende' },
         { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Annuale', 'Supplementare', 'A sorpresa', 'Controllo documentale'] },
         { k: 'norma', l: 'Norma / schema', t: 'select', opts: ['Reg. UE 848/2018', 'SQNPI', 'Altro'] },
-        { k: 'stato', l: 'Stato', t: 'select', opts: ['Programmata', 'Eseguita', 'Verbale da consegnare', 'Chiusa'], def: 'Programmata', req: 1 },
-        { k: 'trimestre', l: 'Trimestre (Modello 22)', t: 'text' },
+        { k: 'stato', l: 'Organizzazione', t: 'select', opts: ['Programmata', 'Svolta', 'Verbale da consegnare', 'Chiusa'], def: 'Programmata', req: 1 },
+        { k: 'periodo', l: 'Periodo', t: 'ref', to: 'periodi' },
+        { k: 'pagamento', l: 'Pagamento', t: 'select', opts: ['Da registrare', 'Registrato', 'Pagato'], def: 'Da registrare' },
+        { k: 'dataCarico', l: 'Data carico gestionale', t: 'date' },
         { k: 'campionamento', l: 'Campionamento', t: 'text' },
         { k: 'scadVerbale', l: 'Scadenza consegna verbale', t: 'date' },
         { k: 'km', l: 'Km percorsi (ordinari)', t: 'number', step: '1' },
@@ -167,7 +197,7 @@
         { k: 'compenso', l: 'Compenso (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.azienda ? lab('aziende', r.azienda) : 'Ispezione'),
-      cols: ['data', 'tipo', 'norma', 'stato', 'trimestre'],
+      cols: ['data', 'tipo', 'stato', 'pagamento'],
       isDone: (r) => r.stato === 'Chiusa',
       events: (r) => {
         const az = r.azienda ? lab('aziende', r.azienda) : '';
@@ -308,7 +338,7 @@
     { id: 'oggi', label: 'Oggi', icon: '📅' },
     { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
-    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'piano', 'nota', 'aziende'] },
+    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
@@ -319,15 +349,29 @@
   function normalize(o) {
     o = o && typeof o === 'object' ? o : {};
     o.version = 1;
-    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, partenza: 'San Salvatore Monferrato' }, o.settings);
+    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, calFeed: false, partenza: 'San Salvatore Monferrato' }, o.settings);
     o.data = o.data && typeof o.data === 'object' ? o.data : {};
-    o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', deleted: [] }, o.meta);
+    o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', feedHash: '', feedAt: '', deleted: [] }, o.meta);
     if (!Array.isArray(o.meta.deleted)) o.meta.deleted = [];
     const now = new Date().toISOString();
     for (const k of Object.keys(ENT)) {
       o.data[k] = Array.isArray(o.data[k]) ? o.data[k] : [];
       for (const r of o.data[k]) if (!r.updated) r.updated = now;
     }
+    // migrazione: trimestre (testo) -> periodo; stato "Eseguita" -> "Svolta"
+    const byTri = {};
+    for (const ek of ['piano', 'ispezioni']) for (const r of o.data[ek]) {
+      if (r.periodo || !r.trimestre) continue;
+      let pid = byTri[r.trimestre];
+      if (!pid) {
+        const q = L.quarterFromText(r.trimestre, 0), av = L.quarterStart(q), ch = L.quarterEnd(q);
+        const ex = q && o.data.periodi.find((x) => x.avvio === av && x.chiusura === ch);
+        if (ex) pid = ex.id; else { pid = uid(); o.data.periodi.push({ id: pid, anno: q ? q.y : new Date().getFullYear(), avvio: av, chiusura: ch, updated: now }); }
+        byTri[r.trimestre] = pid;
+      }
+      r.periodo = pid; r.updated = now;
+    }
+    for (const r of o.data.ispezioni) if (r.stato === 'Eseguita') { r.stato = 'Svolta'; r.updated = now; }
     return o;
   }
   let db;
@@ -463,8 +507,34 @@
     dlg.showModal();
   }
 
-  /* ---------- Importa Modello 22 (EcoGruppo) ---------- */
-  function openImport22() {
+  /* ---------- Ispezioni: Modello 22, periodi e schede azienda ---------- */
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const azOf = (id) => byId('aziende', id) || {};
+  const curQuarter = () => { const d = new Date(); return { n: Math.floor(d.getMonth() / 3) + 1, y: d.getFullYear() }; };
+  function importoOf(i) {
+    const c = parseFloat(i.compenso); if (isFinite(c)) return c;
+    if (L.TARIFFE[i.complessita] != null) return L.TARIFFE[i.complessita];
+    const a = parseFloat(azOf(i.azienda).importo); return isFinite(a) ? a : 0;
+  }
+  function ispCalc(i) {
+    const kmT = (+i.km || 0) + (+i.kmExtra || 0), rimb = r2(kmT * L.KM_EURO), aut = +i.altreSpese || 0, somma = r2(rimb + aut), imp = importoOf(i);
+    return { kmT, rimb, aut, somma, imp, tot: r2(somma + imp) };
+  }
+  function periodoStats(p) {
+    const list = rows('ispezioni').filter((i) => i.periodo === p.id); const st = { n: list.length, tot: 0, imp: 0, somma: 0, rimb: 0, aut: 0 };
+    for (const i of list) { const c = ispCalc(i); st.tot += c.tot; st.imp += c.imp; st.somma += c.somma; st.rimb += c.rimb; st.aut += c.aut; }
+    for (const k of ['tot', 'imp', 'somma', 'rimb', 'aut']) st[k] = r2(st[k]);
+    st.p20 = r2(st.tot * 0.2); st.epap = p.epap ? r2(st.imp * 0.04) : 0; st.accant = st.rimb;
+    return st;
+  }
+  const CL = { Programmata: 'info', Svolta: 'ok', 'Verbale da consegnare': 'warn', Chiusa: 'ok', 'Da registrare': 'info', Registrato: 'warn', Pagato: 'ok' };
+  const pillSel = (opts, val, onch, label) => {
+    const el = h('select', { class: 'pill', 'aria-label': label, onchange: (e) => { el.dataset.c = CL[e.target.value] || ''; onch(e.target.value); } }, opts.map((o) => h('option', { value: o }, o)));
+    el.value = val; el.dataset.c = CL[val] || ''; return el;
+  };
+  const fieldOpts = (ek, k) => fieldOf(ENT[ek], k).opts;
+
+  function openImport22(pid) {
     const dlg = document.getElementById('dlg'); dlg.replaceChildren();
     const status = h('p', { class: 'note' }, 'Scegli uno o più file .xlsx del Modello 22 (anche le integrazioni dello stesso trimestre).');
     const fileIn = h('input', { type: 'file', accept: '.xlsx', multiple: true });
@@ -472,38 +542,44 @@
     let state = null;
     const close = () => dlg.close();
     const fail = (m) => { status.textContent = m; status.style.color = 'var(--warn, #c0392b)'; };
-    const curQ = () => { const d = new Date(); return { n: Math.floor(d.getMonth() / 3) + 1, y: d.getFullYear() }; };
     const findAz = (o) => rows('aziende').find((a) => (a.codice && a.codice.toUpperCase() === o.codice.toUpperCase()) || L.normName(a.ragione) === L.normName(o.ragione));
     const draw = () => {
-      const tri = h('input', { type: 'text', value: state.trimestre });
+      const q = state.q, av = L.quarterStart(q), ch = L.quarterEnd(q);
+      const match = rows('periodi').find((x) => x.avvio === av && x.chiusura === ch);
+      const per = h('select', { 'aria-label': 'Periodo' }, rows('periodi').slice().sort((a, b) => (b.avvio || '').localeCompare(a.avvio || '')).map((x) => h('option', { value: x.id }, ENT.periodi.title(x))),
+        h('option', { value: '__new' }, 'Nuovo periodo: ' + q.n + '° trim. ' + q.y + ' (' + L.fmtDate(av) + ' – ' + L.fmtDate(ch) + ')'));
+      per.value = pid || (match ? match.id : '__new');
+      const inPeriodo = () => (per.value === '__new' ? null : per.value);
       const checks = [];
       const trs = state.ops.map((o) => {
         const az = findAz(o);
-        const dup = az && (rows('piano').some((i) => i.azienda === az.id && i.trimestre === state.trimestre) || rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === state.trimestre));
+        const dup = az && per.value !== '__new' && (rows('piano').some((i) => i.azienda === az.id && i.periodo === per.value) || rows('ispezioni').some((i) => i.azienda === az.id && i.periodo === per.value));
         const cb = h('input', { type: 'checkbox', 'aria-label': 'Importa ' + o.ragione }); cb.checked = !dup; cb.disabled = !!dup; checks.push([cb, o]);
         return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, o.ragione, h('div', { class: 'note' }, [o.comune, o.codice].filter(Boolean).join(' · '))),
-          h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'già nel piano' : az ? 'cliente esistente' : 'NUOVO cliente'));
+          h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'già nel periodo' : az ? 'cliente esistente' : 'NUOVO cliente'));
       });
       const nuovi = state.ops.filter((o) => !findAz(o)).length;
-      status.style.color = ''; status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi importare.';
-      prev.replaceChildren(
-        h('div', { class: 'fld' }, h('label', {}, 'Trimestre'), tri),
+      status.style.color = '';
+      status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi caricare.';
+      per.onchange = draw;
+      prev.replaceChildren(h('div', { class: 'fld' }, h('label', {}, 'Periodo'), per),
         h('div', { class: 'scroll', style: 'max-height:40vh' }, h('table', { class: 'g', style: 'min-width:0' }, h('tbody', {}, trs))));
       btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Annulla'),
         h('button', { type: 'button', class: 'pri', onclick: () => {
           const sel = checks.filter(([cb]) => cb.checked).map(([, o]) => o);
           if (!sel.length) return fail('Nessun operatore selezionato: metti almeno una spunta.');
-          if (!tri.value.trim()) return fail('Scrivi il trimestre (es. 4° trim. 2026).');
-          let na = 0, ni = 0; const now = NOW();
+          const now = NOW(); let pId = inPeriodo();
+          if (!pId) { pId = uid(); rows('periodi').push({ id: pId, anno: q.y, avvio: av, chiusura: ch, updated: now }); }
+          let na = 0, ni = 0;
           for (const o of sel) {
             let az = findAz(o);
             if (!az) { az = { id: uid(), ragione: o.ragione, comune: o.comune, codice: o.codice, updated: now }; rows('aziende').push(az); na++; }
             else { if (!az.codice) az.codice = o.codice; if (!az.comune && o.comune) az.comune = o.comune; az.updated = now; }
-            if (rows('piano').some((i) => i.azienda === az.id && i.trimestre === tri.value.trim())) continue;
-            rows('piano').push({ id: uid(), azienda: az.id, trimestre: tri.value.trim(), tipo: L.tipoDaNote(o.note), campionamento: o.campionamento, note: o.note, updated: now }); ni++;
+            if (rows('piano').some((i) => i.azienda === az.id && i.periodo === pId)) continue;
+            rows('piano').push({ id: uid(), azienda: az.id, periodo: pId, tipo: L.tipoDaNote(o.note), campionamento: o.campionamento, note: o.note, updated: now }); ni++;
           }
-          ui.tri = tri.value.trim(); save(); close(); location.hash = '#/ispezioni/piano'; route(); toast(ni + ' aziende nel piano, ' + na + ' nuove');
-        } }, 'Importa nel piano'));
+          save(); close(); location.hash = '#/ispezioni/periodo/' + pId; route(); toast(ni + ' aziende nel periodo, ' + na + ' nuove');
+        } }, 'Carica nel periodo'));
     };
     fileIn.addEventListener('change', async () => {
       try {
@@ -512,9 +588,9 @@
         for (const f of fileIn.files) ms.push(L.parseModello22(await L.xlsxCells(await f.arrayBuffer())));
         if (!ms.length) return;
         const m = L.mergeModelli(ms);
-        state = { ops: m.operatori, trimestre: m.trimestre, limite: L.quarterEnd(m.quarter || L.quarterFromText(m.trimestre, 0) || curQ()), nfile: ms.length };
+        state = { ops: m.operatori, q: m.quarter || L.quarterFromText(m.trimestre, 0) || curQuarter(), nfile: ms.length };
         draw();
-      } catch (e) { status.textContent = 'Errore: ' + e.message; prev.replaceChildren(); btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Chiudi')); }
+      } catch (e) { fail('Errore: ' + e.message); prev.replaceChildren(); btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Chiudi')); }
     });
     btns.append(h('button', { type: 'button', onclick: close }, 'Annulla'));
     dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📥 Importa Modello 22'), fileIn, status, prev, btns));
@@ -544,13 +620,14 @@
     },
   };
 
+  const open1 = (ek, r) => { if (ENT[ek].detail) location.hash = ENT[ek].detail(r); else openForm(ek, r); };
   function card(ek, r) {
     const ent = ENT[ek]; const done = ent.isDone && ent.isDone(r);
     const meta = [...ent.cols.map((k) => { const f = fieldOf(ent, k); const v = disp(f, r[k]); return v ? (f.t === 'checkbox' ? f.l : v) : null; }).filter(Boolean), ...(ent.extra ? ent.extra(r) : [])];
     const evs = eventsOf(ek, r);
     const next = !done && evs.filter((e) => !e.info || e.date >= L.today()).sort(cmpEv)[0];
-    return h('article', { class: 'card' + (done ? ' done' : ''), tabindex: '0', onclick: () => openForm(ek, r),
-      onkeydown: (e) => { if (e.key === 'Enter') openForm(ek, r); } },
+    return h('article', { class: 'card' + (done ? ' done' : ''), tabindex: '0', onclick: () => open1(ek, r),
+      onkeydown: (e) => { if (e.key === 'Enter') open1(ek, r); } },
     h('div', { class: 'card-t' }, ent.title(r) || '(senza titolo)'),
     h('div', { class: 'card-m' }, meta.join(' · ')),
     h('div', { class: 'card-a' },
@@ -587,10 +664,9 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'piano' ? viewPiano() : ek === 'nota' ? viewNota() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
-      mod.id === 'ispezioni' && (ek === 'ispezioni' || ek === 'aziende') && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
       body);
   }
@@ -606,7 +682,7 @@
       h('div', { class: 'bar' },
         btn('+ Promemoria rapido', () => openForm('promemoria'), 'pri'),
         btn('📅 Esporta in Calendario', () => exportICS(open.filter((e) => e.date >= t), 'scadenze-gestionale.ics'), ''),
-        btn('🔔 Elenco per Promemoria', () => { const f = open.filter((e) => e.date >= t); f.length ? showText('Elenco per Promemoria', L.remindersText(f)) : toast('Nessuna scadenza'); }, '')));
+        btn('🔔 Invia a Promemoria', () => { const f = open.filter((e) => e.date >= t); f.length ? showReminders(f) : toast('Nessuna scadenza'); }, '')));
     if (!open.length) root.append(h('div', { class: 'empty' }, 'Nessuna scadenza. Aggiungi dati dalle sezioni qui sotto o carica i dati di esempio da Impostazioni.'));
     for (const [name, fn] of groups) {
       const list = open.filter(fn); if (!list.length) continue;
@@ -664,6 +740,7 @@
         set('partenza', 'Luogo di partenza (nota spese)', 'text')),
       h('p', { class: 'note' }, 'Gli eventi esportati hanno un identificativo stabile: se li reimporti dopo averli modificati, il Calendario li aggiorna invece di duplicarli.'),
       syncSection(),
+      calendarSection(),
       h('h3', {}, 'Backup dei dati'),
       h('p', { class: 'note' }, 'I dati stanno solo in questo dispositivo. Fai un backup ogni tanto, soprattutto prima di cambiare telefono o browser.'),
       h('div', { class: 'bar' },
@@ -809,78 +886,157 @@
     return root;
   }
 
-  /* ---------- Piano trimestre: aziende da ispezionare (flag) ---------- */
-  const triKey = (t) => { const q = L.quarterFromText(t, 0); return q ? q.y * 10 + q.n : 0; };
-  function viewPiano() {
-    const tris = [...new Set(rows('piano').map((r) => r.trimestre).concat(rows('ispezioni').map((r) => r.trimestre)).filter(Boolean))].sort((a, b) => triKey(b) - triKey(a));
-    const root = h('div');
-    if (!tris.length) {
-      root.append(h('div', { class: 'empty' }, 'Nessun piano. Carica il Modello 22 del trimestre: poi spunti le aziende da ispezionare.'),
-        h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')));
-      return root;
-    }
-    if (!tris.includes(ui.tri)) ui.tri = tris[0];
-    const T = ui.tri, qEnd = L.quarterEnd(L.quarterFromText(T, 0));
-    const ids = new Set(rows('piano').filter((r) => r.trimestre === T).map((r) => r.azienda).concat(rows('ispezioni').filter((r) => r.trimestre === T && r.azienda).map((r) => r.azienda)));
-    const list = [...ids].map((id) => byId('aziende', id)).filter(Boolean).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
-    const ispOf = (aid) => rows('ispezioni').find((i) => i.azienda === aid && i.trimestre === T);
-    const pianoOf = (aid) => rows('piano').find((i) => i.azienda === aid && i.trimestre === T);
-    const tilesBox = h('div');
-    const refresh = () => {
-      const on = list.filter((a) => ispOf(a.id)), done = on.filter((a) => ispOf(a.id).stato !== 'Programmata').length;
-      tilesBox.replaceChildren(tiles([['Da ispezionare', on.length], ['Nel piano', list.length], ['Già eseguite', done]]));
-    };
-    const sel = h('select', { 'aria-label': 'Trimestre', onchange: (e) => { ui.tri = e.target.value; route(); } }, tris.map((t) => h('option', { value: t }, t)));
-    sel.value = T;
-    const rowsEls = list.map((a) => {
-      const p = pianoOf(a.id), i0 = ispOf(a.id), note = (p && p.note) || (i0 && i0.note) || '', camp = (p && p.campionamento) || (i0 && i0.campionamento) || '';
-      const cb = h('input', { type: 'checkbox', 'aria-label': 'Da ispezionare: ' + a.ragione }); cb.checked = !!i0;
-      const tipo = h('select', { 'aria-label': 'Tipo ispezione di ' + a.ragione }, ENT.ispezioni.fields.find((f) => f.k === 'tipo').opts.map((o) => h('option', { value: o }, o)));
-      tipo.value = (i0 && i0.tipo) || (p && p.tipo) || L.tipoDaNote(note);
-      const data = h('input', { type: 'date', 'aria-label': 'Data ispezione di ' + a.ragione, value: (i0 && i0.data) || '' });
-      data.addEventListener('change', () => { const x = ispOf(a.id); if (x) { x.data = data.value || qEnd; x.updated = NOW(); save(); } });
-      tipo.addEventListener('change', () => { const x = ispOf(a.id), q = pianoOf(a.id); if (x) { x.tipo = tipo.value; x.updated = NOW(); } if (q) { q.tipo = tipo.value; q.updated = NOW(); } save(); });
-      cb.addEventListener('change', () => {
-        const x = ispOf(a.id);
-        if (cb.checked && !x) {
-          rows('ispezioni').push({ id: uid(), data: data.value || qEnd, azienda: a.id, tipo: tipo.value, norma: 'Reg. UE 848/2018', stato: 'Programmata', trimestre: T, campionamento: camp, note, updated: NOW() });
-          if (!data.value) data.value = qEnd;
-        } else if (!cb.checked && x) {
-          if (x.stato !== 'Programmata') { cb.checked = true; return toast('Ispezione già eseguita: non si toglie dal piano'); }
-          dropWhere('ispezioni', (y) => y.id === x.id);
-        }
-        save(); refresh();
-      });
-      return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, a.ragione, h('div', { class: 'note' }, [a.comune, a.codice].filter(Boolean).join(' · '))), h('td', {}, tipo), h('td', {}, data),
-        h('td', { class: 'note', style: 'min-width:160px;white-space:normal' }, [camp && 'Campionamento: ' + camp, note].filter(Boolean).join(' — ')));
+  /* ---------- Periodi (trimestri), scheda periodo e scheda azienda ---------- */
+  const tag = (txt, c) => h('span', { class: 'pill', 'data-c': c || '' }, txt);
+
+  function viewPeriodi() {
+    const list = rows('periodi').slice().sort((a, b) => (a.avvio || '').localeCompare(b.avvio || ''));
+    const q = curQuarter();
+    const root = h('div', {}, h('div', { class: 'bar' },
+      btn('+ Nuovo periodo', () => openForm('periodi', null, { anno: q.y, avvio: L.quarterStart(q), chiusura: L.quarterEnd(q) }), 'pri'),
+      btn('📥 Importa Modello 22', () => openImport22(null), '')));
+    if (!list.length) { root.append(h('div', { class: 'empty' }, 'Nessun periodo. Carica il Modello 22 del trimestre oppure crea un periodo.')); return root; }
+    const T = { tot: 0, imp: 0, somma: 0, p20: 0 };
+    const body = list.map((p, i) => {
+      const st = periodoStats(p); T.tot += st.tot; T.imp += st.imp; T.somma += st.somma; T.p20 += st.p20;
+      return h('tr', { class: 'clk', tabindex: '0', onclick: () => { location.hash = '#/ispezioni/periodo/' + p.id; } },
+        h('td', {}, i + 1), h('td', {}, p.anno), h('td', {}, L.fmtDate(p.avvio)), h('td', {}, L.fmtDate(p.chiusura)), h('td', { class: 'r' }, L.eur(st.tot)), h('td', { class: 'r' }, L.eur(st.imp)), h('td', { class: 'r' }, L.eur(st.somma)), h('td', { class: 'r' }, L.eur(st.p20)));
     });
+    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' },
+      h('thead', {}, h('tr', {}, ['', 'Anno lavorativo', 'Avvio trimestre', 'Chiusura trimestre', 'Totale', 'Totale ispezioni', 'Totale rimborso', '20%'].map((x) => h('th', {}, x)))),
+      h('tbody', {}, body), h('tfoot', {}, h('tr', {}, h('td', { colspan: 4 }, 'Σ'), h('td', { class: 'r' }, L.eur(r2(T.tot))), h('td', { class: 'r' }, L.eur(r2(T.imp))), h('td', { class: 'r' }, L.eur(r2(T.somma))), h('td', { class: 'r' }, L.eur(r2(T.p20))))))));
+    return root;
+  }
+
+  function viewPeriodo(id) {
+    const p = byId('periodi', id);
+    if (!p) return h('div', { class: 'empty' }, 'Periodo non trovato.');
+    const T = ENT.periodi.title(p), qEnd = p.chiusura || L.today();
+    const ids = new Set(rows('piano').filter((r) => r.periodo === id).map((r) => r.azienda).concat(rows('ispezioni').filter((r) => r.periodo === id && r.azienda).map((r) => r.azienda)));
+    const list = [...ids].map((a) => byId('aziende', a)).filter(Boolean).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
+    const ispOf = (aid) => rows('ispezioni').find((i) => i.azienda === aid && i.periodo === id);
+    const pianoOf = (aid) => rows('piano').find((i) => i.azienda === aid && i.periodo === id);
+    const setP = (k, v) => { p[k] = v; p.updated = NOW(); save(); };
+    const fld = (label, el) => h('div', { class: 'fld' }, h('label', {}, label), el);
+    const anno = h('input', { type: 'number', step: '1', value: p.anno || '', onchange: (e) => { setP('anno', +e.target.value || p.anno); } });
+    const av = h('input', { type: 'date', value: p.avvio || '', onchange: (e) => { setP('avvio', e.target.value); route(); } });
+    const ch = h('input', { type: 'date', value: p.chiusura || '', onchange: (e) => { setP('chiusura', e.target.value); route(); } });
+    const lbl = p.avvio && p.chiusura ? L.periodoLabel(p.avvio, p.chiusura) : '';
+    const foot = h('tfoot'), boxes = h('div', { class: 'kv' }); const cellsOf = new Map();
+    const refresh = () => {
+      const st = periodoStats(p);
+      foot.replaceChildren(h('tr', {}, h('td', { colspan: 5 }, 'Σ'), h('td'), h('td', { class: 'r' }, L.eur(st.aut)), h('td', { class: 'r' }, L.eur(st.rimb)), h('td', { class: 'r' }, L.eur(st.somma)), h('td'), h('td', { class: 'r' }, L.eur(st.imp)), h('td', { class: 'r' }, L.eur(st.tot))));
+      const kv = (l, v) => h('div', {}, h('small', {}, l), v);
+      const epap = h('input', { type: 'checkbox', 'aria-label': 'Applica EPAP', onchange: (e) => { setP('epap', e.target.checked); refresh(); } }); epap.checked = !!p.epap;
+      boxes.replaceChildren(kv('20%', L.eur(st.p20)), kv('EPAP (4%)', h('span', {}, L.eur(st.epap) + ' ', h('label', { class: 'note' }, epap, ' applica'))), kv('Da accantonare', L.eur(st.accant)));
+    };
+    const upd = (x) => { const c = ispCalc(x), cs = cellsOf.get(x.id); if (!cs) return; cs.rimb.textContent = L.eur(c.rimb); cs.somma.textContent = L.eur(c.somma); cs.imp.value = c.imp; cs.tot.textContent = L.eur(c.tot); refresh(); };
+    const numIn = (x, key, step) => h('input', { type: 'number', inputmode: 'decimal', step, min: '0', class: 'score', 'aria-label': key, value: x[key] == null || x[key] === '' ? '' : x[key],
+      onchange: (e) => { const v = e.target.value.replace(',', '.'); x[key] = v === '' ? '' : Number(v); x.updated = NOW(); save(); upd(x); } });
+    const tbl = h('div', { class: 'scroll' });
+    const draw = () => {
+      cellsOf.clear();
+      const trs = list.map((a) => {
+        const x = ispOf(a.id), pr = pianoOf(a.id), note = (pr && pr.note) || (x && x.note) || '', camp = (pr && pr.campionamento) || (x && x.campionamento) || '';
+        const cb = h('input', { type: 'checkbox', 'aria-label': 'Da ispezionare: ' + a.ragione }); cb.checked = !!x;
+        cb.addEventListener('change', () => {
+          const cur = ispOf(a.id);
+          if (cb.checked && !cur) {
+            const imp = parseFloat(a.importo);
+            rows('ispezioni').push(Object.assign({ id: uid(), periodo: id, data: qEnd, azienda: a.id, tipo: (pr && pr.tipo) || L.tipoDaNote(note), norma: 'Reg. UE 848/2018', stato: 'Programmata', pagamento: 'Da registrare', campionamento: camp, note, updated: NOW() }, isFinite(imp) ? { compenso: imp } : {}));
+          } else if (!cb.checked && cur) {
+            if (cur.stato !== 'Programmata') { cb.checked = true; return toast('Ispezione già svolta: non si toglie dal periodo'); }
+            dropWhere('ispezioni', (y) => y.id === cur.id);
+          }
+          save(); draw(); refresh();
+        });
+        const name = h('td', { class: 'nm' }, h('a', { href: '#/ispezioni/azienda/' + a.id }, a.ragione), h('div', { class: 'note' }, [a.comune, a.codice].filter(Boolean).join(' · ')));
+        if (!x) return h('tr', { class: 'off' }, h('td', {}, cb), name, h('td', { class: 'note', colspan: 10 }, ['Non da ispezionare', pr && pr.tipo && L.tipoDaNote(note) !== 'Annuale' ? pr.tipo : '', note].filter(Boolean).join(' — ')));
+        const cs = { rimb: h('td', { class: 'r' }), somma: h('td', { class: 'r' }), tot: h('td', { class: 'r tot' }) }; cellsOf.set(x.id, cs);
+        const dt = h('input', { type: 'date', value: x.data || '', 'aria-label': 'Data ispezione', onchange: (e) => { x.data = e.target.value || qEnd; x.updated = NOW(); save(); } });
+        const comp = h('select', { 'aria-label': 'Complessità', onchange: (e) => { x.complessita = e.target.value; if (L.TARIFFE[x.complessita] != null) x.compenso = L.TARIFFE[x.complessita]; x.updated = NOW(); save(); upd(x); } },
+          h('option', { value: '' }, '—'), Object.keys(L.TARIFFE).map((k) => h('option', { value: k }, k))); comp.value = x.complessita || '';
+        cs.imp = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', class: 'score', 'aria-label': 'Importo ispezione', value: importoOf(x),
+          onchange: (e) => { const v = e.target.value.replace(',', '.'); if (v === '') delete x.compenso; else x.compenso = Number(v); x.updated = NOW(); save(); upd(x); } });
+        const c = ispCalc(x); cs.rimb.textContent = L.eur(c.rimb); cs.somma.textContent = L.eur(c.somma); cs.tot.textContent = L.eur(c.tot);
+        return h('tr', {}, h('td', {}, cb), name,
+          h('td', {}, pillSel(fieldOpts('ispezioni', 'stato'), x.stato, (v) => { x.stato = v; x.updated = NOW(); save(); }, 'Organizzazione')), h('td', {}, dt),
+          h('td', {}, pillSel(fieldOpts('ispezioni', 'pagamento'), x.pagamento || 'Da registrare', (v) => { x.pagamento = v; x.updated = NOW(); save(); }, 'Pagamento')),
+          h('td', {}, numIn(x, 'km', '1')), h('td', {}, numIn(x, 'altreSpese', '0.01')), cs.rimb, cs.somma, h('td', {}, comp), h('td', {}, cs.imp), cs.tot);
+      });
+      tbl.replaceChildren(h('table', { class: 'g', style: 'min-width:1100px' },
+        h('thead', {}, h('tr', {}, ['✓', 'Operatore', 'Organizzazione', 'Data ispezione', 'Pagamento', 'Km', 'Autostrada €', 'Rimborso km', 'Somma rimborso', 'Complessità', 'Importo ispezione', 'Totale'].map((x) => h('th', {}, x)))),
+        h('tbody', {}, trs), foot));
+    };
     const all = (on) => () => {
       for (const a of list) {
-        const x = ispOf(a.id), p = pianoOf(a.id), note = (p && p.note) || '';
-        if (on && !x) rows('ispezioni').push({ id: uid(), data: qEnd, azienda: a.id, tipo: (p && p.tipo) || L.tipoDaNote(note), norma: 'Reg. UE 848/2018', stato: 'Programmata', trimestre: T, campionamento: (p && p.campionamento) || '', note, updated: NOW() });
+        const x = ispOf(a.id), pr = pianoOf(a.id), imp = parseFloat(a.importo);
+        if (on && !x) rows('ispezioni').push(Object.assign({ id: uid(), periodo: id, data: qEnd, azienda: a.id, tipo: (pr && pr.tipo) || 'Annuale', norma: 'Reg. UE 848/2018', stato: 'Programmata', pagamento: 'Da registrare', campionamento: (pr && pr.campionamento) || '', note: (pr && pr.note) || '', updated: NOW() }, isFinite(imp) ? { compenso: imp } : {}));
         if (!on && x && x.stato === 'Programmata') dropWhere('ispezioni', (y) => y.id === x.id);
       }
-      save(); route();
+      save(); draw(); refresh();
     };
     const addAz = () => {
       const dlg = document.getElementById('dlg'); dlg.replaceChildren();
       const cand = rows('aziende').filter((a) => !ids.has(a.id)).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
       const pick = h('select', {}, cand.map((a) => h('option', { value: a.id }, a.ragione + (a.comune ? ' (' + a.comune + ')' : ''))));
-      dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '+ Azienda nel piano ' + T),
-        cand.length ? h('div', { class: 'fld' }, h('label', {}, 'Scegli un’azienda già in archivio'), pick) : h('p', { class: 'note' }, 'Tutte le aziende in archivio sono già nel piano. Creane una nuova dalla scheda Aziende.'),
+      dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '+ Azienda nel periodo'),
+        cand.length ? h('div', { class: 'fld' }, h('label', {}, 'Scegli un’azienda già in archivio'), pick) : h('p', { class: 'note' }, 'Tutte le aziende in archivio sono già nel periodo. Creane una nuova da Aziende.'),
         h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Chiudi'),
-          cand.length && h('button', { type: 'button', class: 'pri', onclick: () => {
-            rows('piano').push({ id: uid(), azienda: pick.value, trimestre: T, tipo: 'Annuale', campionamento: '', note: '', updated: NOW() });
-            save(); dlg.close(); route();
-          } }, 'Aggiungi'))));
+          cand.length && h('button', { type: 'button', class: 'pri', onclick: () => { rows('piano').push({ id: uid(), azienda: pick.value, periodo: id, tipo: 'Annuale', campionamento: '', note: '', updated: NOW() }); save(); dlg.close(); route(); } }, 'Aggiungi'))));
       dlg.showModal();
     };
-    root.append(h('div', { class: 'bar' }, sel, btn('📥 Importa Modello 22', openImport22, 'pri'), btn('+ Azienda', addAz, '')), tilesBox,
-      h('div', { class: 'bar' }, btn('Spunta tutte', all(true), ''), btn('Togli tutte', all(false), '')),
-      h('p', { class: 'note' }, 'Spunta le aziende da ispezionare: per ognuna si crea l’ispezione (Programmata). Metti la data quando la fissi; finché è vuota vale la fine del trimestre (' + L.fmtDate(qEnd) + ').'),
-      h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, h('tr', {}, h('th', {}, '✓'), h('th', {}, 'Azienda'), h('th', {}, 'Tipo'), h('th', {}, 'Data'), h('th', {}, 'Dal Modello 22'))), h('tbody', {}, rowsEls))));
-    refresh();
+    const notaRows = () => rows('ispezioni').filter((i) => i.periodo === id && i.azienda && i.stato !== 'Programmata').sort((a, b) => (a.data || '').localeCompare(b.data || '')).map((i) => {
+      const a = azOf(i.azienda);
+      return { operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) };
+    });
+    const download = async () => {
+      try {
+        const rr = notaRows(); if (!rr.length) return toast('Segna almeno un\'ispezione come Svolta');
+        await loadNotaTemplate();
+        const bytes = Uint8Array.from(atob(window.NOTA_TEMPLATE), (c) => c.charCodeAt(0));
+        const dates = rr.map((r) => r.data).filter(Boolean).sort();
+        const out = await L.buildNotaSpese(bytes, { periodo: L.periodoLabel(dates[0], dates[dates.length - 1]), righe: rr });
+        const url = URL.createObjectURL(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = h('a', { href: url, download: 'Nota_Spese_' + (dates[0] || '').slice(0, 7) + '.xlsx' }); document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        toast(rr.length > 22 ? 'Il modello ha 22 righe: le altre sono escluse' : 'Nota spese scaricata');
+      } catch (e) { toast('Errore: ' + e.message); }
+    };
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/ispezioni/periodi' }, '← Periodi')), h('h2', {}, '📋 ' + T),
+      h('div', { class: 'row3' }, fld('Anno lavorativo', anno), fld('Avvio trimestre', av), fld('Chiusura trimestre', ch)),
+      lbl && h('p', { class: 'note' }, 'Ispezioni BIO effettuate nel mese di ' + lbl),
+      h('div', { class: 'bar' }, btn('📥 Importa Modello 22', () => openImport22(id), 'pri'), btn('+ Azienda', addAz, ''), btn('Spunta tutte', all(true), ''), btn('Togli tutte', all(false), ''),
+        btn('⬇️ Nota spese (Excel)', download, ''), btn('Modifica periodo', () => openForm('periodi', p), '')),
+      h('p', { class: 'note' }, 'Il Modello 22 elenca le aziende del trimestre: spunta quelle da ispezionare. Km a ' + L.eur(L.KM_EURO) + '/km; importo dall\'azienda o dalla complessità (Basso 80 · Medio 90 · Alto 110 · Altro combinato 40 · Altro singolo 70). Si salva da solo.'));
+    if (!list.length) { root.append(h('div', { class: 'empty' }, 'Nessuna azienda in questo periodo: carica il Modello 22 o aggiungile a mano.')); return root; }
+    draw(); refresh();
+    root.append(tbl, boxes);
     return root;
+  }
+
+  function viewAzienda(id) {
+    const a = byId('aziende', id);
+    if (!a) return h('div', { class: 'empty' }, 'Azienda non trovata.');
+    const kv = (l, v) => h('div', {}, h('small', {}, l), v || h('span', { class: 'note' }, '—'));
+    const link = (v, pre) => (v ? h('a', { href: pre + v }, v) : null);
+    const isp = rows('ispezioni').filter((i) => i.azienda === id).sort((a1, b1) => (a1.data || '').localeCompare(b1.data || ''));
+    const m44 = rows('modello44').filter((m) => m.azienda === id).sort((a1, b1) => String(a1.numero || '').localeCompare(String(b1.numero || ''), 'it', { numeric: true }));
+    const tbl = (heads, trs) => h('div', { class: 'scroll' }, h('table', { class: 'g', style: 'min-width:0' }, h('thead', {}, h('tr', {}, heads.map((x) => h('th', {}, x)))), h('tbody', {}, trs)));
+    return h('div', {}, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')), h('h2', {}, '🏢 ' + a.ragione),
+      h('div', { class: 'bar' }, btn('✏️ Modifica azienda', () => openForm('aziende', a), 'pri')),
+      h('div', { class: 'kv' }, kv('Operatore', a.ragione), kv('Codice operatore', a.codice), kv('Importo ispezione', a.importo !== undefined && a.importo !== '' ? L.eur(+a.importo) : ''),
+        kv('Email', link(a.email, 'mailto:')), kv('Fisso', link(a.fisso, 'tel:')), kv('Telefono', link(a.telefono, 'tel:')), kv('Ubicazione', a.ubicazione), kv('Comune', a.comune), kv('Provincia', a.provincia), kv('Tecnico', a.tecnico)),
+      a.note && h('p', { class: 'note' }, a.note),
+      h('h3', {}, 'Ispezioni'),
+      isp.length ? tbl(['Data ispezione', 'Data carico gestionale', 'Partenza', 'Destinazione 01', 'Organizzazione', 'Periodo'],
+        isp.map((i) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('ispezioni', i) },
+          h('td', {}, L.fmtDate(i.data)), h('td', {}, L.fmtDate(i.dataCarico)), h('td', {}, i.partenza || ''), h('td', {}, i.destinazione || ''), h('td', {}, tag(i.stato, CL[i.stato])), h('td', { class: 'note' }, i.periodo ? lab('periodi', i.periodo) : '')))) : h('p', { class: 'note' }, 'Nessuna ispezione.'),
+      h('div', { class: 'bar' }, btn('+ Crea scheda', () => openForm('ispezioni', null, { azienda: id }), '')),
+      h('h3', {}, 'Modello 44'),
+      m44.length ? tbl(['Numero', 'Codice operatore', 'Le NC precedenti sono state chiuse?', 'Esito controllo', 'C’è stata variazione nello status di conversione?'],
+        m44.map((m) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('modello44', m) }, h('td', {}, m.numero || ''), h('td', {}, a.codice || ''), h('td', {}, m.ncChiuse || ''), h('td', {}, m.esito || ''), h('td', {}, m.variazione || '')))) : h('p', { class: 'note' }, 'Nessun Modello 44.'),
+      h('div', { class: 'bar' }, btn('+ Crea scheda', () => openForm('modello44', null, { azienda: id }), '')));
   }
 
   /* ---------- Nota spese ispettori (modello EcoGruppo) ---------- */
@@ -889,65 +1045,74 @@
     const sc = document.createElement('script'); sc.src = 'nota-template.js'; sc.onload = ok; sc.onerror = () => ko(new Error('Modello non disponibile (sei offline?)'));
     document.head.append(sc);
   });
-  function viewNota() {
-    const t = L.today();
-    if (!ui.nd) { const d = L.parse(t); ui.nd = L.iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)); ui.na = t; }
-    const dal = h('input', { type: 'date', value: ui.nd, 'aria-label': 'Dal', onchange: (e) => { ui.nd = e.target.value || ui.nd; route(); } });
-    const al = h('input', { type: 'date', value: ui.na, 'aria-label': 'Al', onchange: (e) => { ui.na = e.target.value || ui.na; route(); } });
-    const inc = h('input', { type: 'checkbox', 'aria-label': 'Includi programmate', onchange: (e) => { ui.nProg = e.target.checked; route(); } }); inc.checked = !!ui.nProg;
-    const list = rows('ispezioni').filter((i) => i.azienda && i.data >= ui.nd && i.data <= ui.na && (ui.nProg || i.stato !== 'Programmata')).sort((a, b) => a.data.localeCompare(b.data));
-    const defP = db.settings.partenza || '';
-    const rowOf = (i) => { const a = byId('aziende', i.azienda) || {}; return { operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || defP, destinazione: i.destinazione || a.comune || '',
-      km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '' }; };
-    const tot = h('tr', {}); const calc = new Map();
-    const refresh = () => {
-      let k = 0, sp = 0, al2 = 0, co = 0, to = 0;
-      for (const i of list) {
-        const c = L.notaCalc(rowOf(i)), cells = calc.get(i.id);
-        cells.km.textContent = L.num(c.kmTot); cells.sp.textContent = L.eur(c.speseKm); cells.co.textContent = c.compenso == null ? '—' : L.num(c.compenso); cells.to.textContent = c.totale == null ? '—' : L.eur(c.totale);
-        k += c.kmTot; sp += c.speseKm; al2 += c.altre; co += c.compenso || 0; to += c.totale || 0;
-      }
-      tot.replaceChildren(h('td', { colspan: 5 }, 'TOTALI'), h('td'), h('td', {}, L.num(k)), h('td', {}, L.eur(sp)), h('td', {}, L.eur(al2)), h('td'), h('td', {}, L.eur(co)), h('td', {}, L.eur(to)));
-    };
-    const txt = (i, key, ph, w) => { const el = h('input', { type: 'text', value: i[key] || '', placeholder: ph, style: 'min-width:' + w + 'px', onchange: (e) => { i[key] = e.target.value.trim(); i.updated = NOW(); save(); } }); return el; };
-    const numIn = (i, key) => h('input', { type: 'number', inputmode: 'decimal', step: key === 'altreSpese' ? '0.01' : '1', min: '0', class: 'score', value: i[key] == null || i[key] === '' ? '' : i[key],
-      onchange: (e) => { const v = e.target.value.replace(',', '.'); i[key] = v === '' ? '' : Number(v); i.updated = NOW(); save(); refresh(); } });
-    const body = list.map((i) => {
-      const a = byId('aziende', i.azienda) || {};
-      const cs = h('select', { 'aria-label': 'Complessità', onchange: (e) => { i.complessita = e.target.value; if (L.TARIFFE[i.complessita] != null) i.compenso = L.TARIFFE[i.complessita]; i.updated = NOW(); save(); refresh(); } },
-        h('option', { value: '' }, '—'), Object.keys(L.TARIFFE).map((k) => h('option', { value: k }, k))); cs.value = i.complessita || '';
-      const cells = { km: h('td'), sp: h('td'), co: h('td'), to: h('td', { class: 'tot' }) }; calc.set(i.id, cells);
-      const part = txt(i, 'partenza', defP, 150), dest = h('input', { type: 'text', value: i.destinazione || a.comune || '', style: 'min-width:130px', onchange: (e) => { i.destinazione = e.target.value.trim(); i.updated = NOW(); save(); } });
-      return h('tr', {}, h('td', { class: 'nm' }, a.ragione || '?', h('div', { class: 'note' }, [L.fmtDate(i.data), a.codice].filter(Boolean).join(' · '))), h('td', {}, part), h('td', {}, dest),
-        h('td', {}, numIn(i, 'km')), h('td', {}, numIn(i, 'kmExtra')), cells.km, cells.sp, h('td', {}, numIn(i, 'altreSpese')), h('td', {}, cs), cells.co, cells.to);
-    });
-    const download = async () => {
-      try {
-        if (!list.length) return toast('Nessuna ispezione nel periodo');
-        await loadNotaTemplate();
-        const bin = atob(window.NOTA_TEMPLATE), bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-        const out = await L.buildNotaSpese(bytes, { periodo: L.periodoLabel(ui.nd, ui.na), righe: list.map(rowOf) });
-        const url = URL.createObjectURL(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-        const a = h('a', { href: url, download: 'Nota_Spese_' + ui.nd.slice(0, 7) + '_' + ui.na.slice(0, 7) + '.xlsx' }); document.body.append(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
-        toast(list.length > 22 ? 'Attenzione: il modello ha 22 righe, le altre sono escluse' : 'Nota spese scaricata');
-      } catch (e) { toast('Errore: ' + e.message); }
-    };
-    const copy = () => {
-      const lines = [['Operatore', 'Codice', 'Data', 'Partenza', 'Destinazione', 'Km ordinari', 'Km extra', 'Km totali', 'Spese km', 'Altre spese', 'Complessità', 'Compenso', 'Totale'].join('\t')];
-      for (const i of list) { const r = rowOf(i), c = L.notaCalc(r); lines.push([r.operatore, r.codice, L.fmtDate(r.data), r.partenza, r.destinazione, r.km || 0, r.kmExtra || 0, c.kmTot, String(c.speseKm).replace('.', ','), String(c.altre).replace('.', ','), r.complessita, c.compenso == null ? '' : c.compenso, c.totale == null ? '' : String(c.totale).replace('.', ',')].join('\t')); }
-      showText('Nota spese (tabella)', lines.join('\n'), 'Incolla in un foglio di calcolo.');
-    };
-    const root = h('div', {}, h('div', { class: 'bar' }, h('label', { class: 'note' }, 'Dal ', dal), h('label', { class: 'note' }, 'Al ', al), h('label', { class: 'note' }, inc, ' anche programmate')),
-      h('div', { class: 'bar' }, btn('⬇️ Scarica Excel (modello EcoGruppo)', download, 'pri'), btn('Copia tabella', copy, '')),
-      h('p', { class: 'note' }, 'Ispezioni dal ' + L.fmtDate(ui.nd) + ' al ' + L.fmtDate(ui.na) + ' (' + L.periodoLabel(ui.nd, ui.na) + '). Km a ' + L.eur(L.KM_EURO) + '/km; compenso in base alla complessità (Basso 80 · Medio 90 · Alto 110 · Altro combinato 40 · Altro singolo 70). Le modifiche si salvano nell\'ispezione.'));
-    if (!list.length) { root.append(h('div', { class: 'empty' }, 'Nessuna ispezione eseguita in questo periodo. Cambia le date o segna le ispezioni come eseguite.')); return root; }
-    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g', style: 'min-width:980px' },
-      h('thead', {}, h('tr', {}, ['Operatore', 'Partenza', 'Destinazione', 'Km ord.', 'Km extra', 'Km tot.', 'Spese km', 'Altre spese €', 'Complessità', 'Compenso', 'Totale'].map((x) => h('th', {}, x)))),
-      h('tbody', {}, body), h('tfoot', {}, tot))));
-    if (list.length > 22) root.append(h('p', { class: 'note' }, '⚠️ Il modello ha 22 righe: nel file Excel finiscono le prime 22.'));
-    refresh();
-    return root;
+
+  /* ---------- Calendario Apple: abbonamento automatico (file .ics su Supabase Storage) ---------- */
+  const uidOf = (s) => { try { return JSON.parse(atob(s.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).sub || ''; } catch (e) { return ''; } };
+  const feedUrl = () => { const s = getSession(), u = s && uidOf(s); return u ? cfg.supabaseUrl + '/storage/v1/object/public/calendario/' + u + '.ics' : ''; };
+  const djb = (t) => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
+  function feedICS() {
+    const from = L.addDays(L.today(), -14);
+    const ev = allEvents().filter((e) => !e.done && synced(e.entKey) && e.date >= from).sort(cmpEv);
+    return L.buildICS(ev, Object.assign(icsOpts(), { name: 'Gestionale Agronomo' })).replace('METHOD:PUBLISH', 'METHOD:PUBLISH\r\nX-PUBLISHED-TTL:PT1H\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H');
+  }
+  async function putFeed(text, retried) {
+    let s = getSession(); if (!s) throw new Error('Non collegato');
+    if (s.expires_at - 60 < Date.now() / 1000) { await refresh(); s = getSession(); }
+    const res = await fetch(cfg.supabaseUrl + '/storage/v1/object/calendario/' + uidOf(s) + '.ics', { method: 'POST',
+      headers: { apikey: cfg.supabaseKey, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'text/calendar', 'x-upsert': 'true', 'cache-control': 'max-age=60' }, body: text });
+    if (res.status === 401 && !retried) { await refresh(); return putFeed(text, true); }
+    if (!res.ok) throw new Error((await res.text()).slice(0, 160) || 'Errore ' + res.status);
+  }
+  async function publishFeed(manual) {
+    if (!cfg.on || !getSession() || !db.settings.calFeed) return;
+    try {
+      const ics = feedICS(), hash = djb(ics.replace(/DTSTAMP:\S+/g, ''));
+      if (!manual && db.meta.feedHash === hash) return;
+      await putFeed(ics); db.meta.feedHash = hash; db.meta.feedAt = new Date().toISOString(); persist();
+      if (manual) { toast('Calendario aggiornato'); route(); }
+    } catch (e) {
+      const m = /bucket|not found|policy|row-level|403|404/i.test(e.message) ? 'manca la configurazione su Supabase (script calendario.sql)' : e.message;
+      db.meta.feedAt = ''; if (manual) toast('Calendario non aggiornato: ' + m); setStatus('☁️ ⚠️', 'Calendario: ' + m);
+    }
+  }
+  function calendarSection() {
+    const box = h('div', {}, h('h3', {}, 'Calendario Apple (automatico)'));
+    const s = cfg.on && getSession();
+    if (!s) { box.append(h('p', { class: 'note' }, 'Accedi alla sincronizzazione (qui sopra) per attivare l\'abbonamento al Calendario.')); return box; }
+    const on = !!db.settings.calFeed, url = feedUrl();
+    box.append(h('p', { class: 'note' }, 'Le scadenze (ispezioni, trattamenti, manutenzioni, impegni…) compaiono in Calendario e si aggiornano da sole. Le fatture restano escluse.'),
+      h('div', { class: 'bar' }, btn(on ? 'Disattiva' : 'Attiva abbonamento', () => { db.settings.calFeed = !on; save(); if (!on) publishFeed(true); route(); }, on ? '' : 'pri')));
+    if (on) {
+      const inp = h('input', { type: 'text', readonly: true, value: url, 'aria-label': 'Link del calendario' });
+      box.append(h('div', { class: 'fld' }, h('label', {}, 'Link del calendario'), inp),
+        h('div', { class: 'bar' },
+          h('a', { class: 'btn pri', href: url.replace(/^https:/, 'webcal:') }, '📲 Abbonati in Calendario'),
+          btn('Copia link', async () => { try { await navigator.clipboard.writeText(url); toast('Link copiato'); } catch (e) { inp.select(); toast('Seleziona e copia'); } }, ''),
+          btn('Aggiorna ora', () => publishFeed(true), '')),
+        h('p', { class: 'note' }, db.meta.feedAt ? 'Ultimo aggiornamento: ' + new Date(db.meta.feedAt).toLocaleString('it-IT') + '.' : 'Non ancora pubblicato: se resta così esegui lo script calendario.sql su Supabase (vedi README).'),
+        h('p', { class: 'note' }, 'iPhone: tocca "Abbonati". Mac: Calendario → File → Nuovo abbonamento a calendario → incolla il link. Chi ha il link può leggere le scadenze: non condividerlo. L\'app aggiorna il file a ogni sincronizzazione; Calendario lo rilegge ogni tanto (circa ogni ora).'));
+    }
+    return box;
+  }
+
+  /* ---------- Promemoria Apple ---------- */
+  function showReminders(events) {
+    const text = L.remindersText(events), dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const ta = h('textarea', { readonly: true, style: 'min-height:200px' }); ta.value = text;
+    const sc = 'shortcuts://run-shortcut?name=' + encodeURIComponent('Scadenze in Promemoria') + '&input=text&text=' + encodeURIComponent(text);
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '🔔 Scadenze per Promemoria'), ta,
+      h('div', { class: 'bar' }, h('a', { class: 'btn pri', href: sc }, '▶ Invia a Promemoria'),
+        navigator.share && btn('Condividi…', async () => { try { await navigator.share({ text }); } catch (e) { /* annullato */ } }, ''),
+        btn('Copia', async () => { try { await navigator.clipboard.writeText(text); toast('Copiato'); } catch (e) { ta.select(); toast('Seleziona e copia'); } }, '')),
+      h('details', {}, h('summary', {}, 'Prima volta: crea il Comando Rapido (1 minuto)'),
+        h('ol', { class: 'note' },
+          h('li', {}, 'App Comandi → + → nome: Scadenze in Promemoria.'),
+          h('li', {}, 'Aggiungi "Ricevi Testo da Input rapido".'),
+          h('li', {}, 'Aggiungi "Dividi testo" (a capo).'),
+          h('li', {}, 'Aggiungi "Ripeti con ciascuno": dentro, "Ricava date dall\'input" e poi "Aggiungi nuovo promemoria" con titolo = Elemento ripetuto e data = Date.'),
+          h('li', {}, 'Da ora "Invia a Promemoria" crea un promemoria per ogni riga, con la scadenza.'))),
+      h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Chiudi'))));
+    dlg.showModal();
   }
 
   /* ---------- Ripristino / cancellazione (coerenti con la sincronizzazione) ---------- */
@@ -1026,6 +1191,7 @@
       db.meta.deleted = db.meta.deleted.filter((d) => !tombs.includes(d));
       db.meta.lastPush = t0; db.meta.lastSync = new Date().toISOString();
       setStatus('☁️ ✓', 'Sincronizzato alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
+      publishFeed(false);
       if (changed) route();
     } catch (e) {
       if (getSession()) setStatus('☁️ ⚠️', 'Sincronizzazione non riuscita: ' + e.message);
@@ -1078,12 +1244,13 @@
     renderNav(mod.id);
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
-      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : viewModule(mod, ek));
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg)
+      : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
   }
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); route(); });
   route();
   startSync();
 
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
-  window.__gestionale = { route, syncNow, login, getSession, get db() { return db; }, seedDemo, ENT };
+  window.__gestionale = { publishFeed, feedICS, feedUrl, route, syncNow, login, getSession, get db() { return db; }, seedDemo, ENT };
 })();

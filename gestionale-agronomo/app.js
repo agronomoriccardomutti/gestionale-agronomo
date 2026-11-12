@@ -520,8 +520,10 @@
     const kmT = (+i.km || 0) + (+i.kmExtra || 0), rimb = r2(kmT * L.KM_EURO), aut = +i.altreSpese || 0, somma = r2(rimb + aut), imp = importoOf(i);
     return { kmT, rimb, aut, somma, imp, tot: r2(somma + imp) };
   }
+  // un'ispezione Chiusa con data fuori dal periodo non appartiene a quel periodo
+  const inPer = (i, p) => i.periodo === p.id && !(i.stato === 'Chiusa' && i.data && p.avvio && p.chiusura && (i.data < p.avvio || i.data > p.chiusura));
   function periodoStats(p) {
-    const list = rows('ispezioni').filter((i) => i.periodo === p.id); const st = { n: list.length, tot: 0, imp: 0, somma: 0, rimb: 0, aut: 0 };
+    const list = rows('ispezioni').filter((i) => inPer(i, p)); const st = { n: list.length, tot: 0, imp: 0, somma: 0, rimb: 0, aut: 0 };
     for (const i of list) { const c = ispCalc(i); st.tot += c.tot; st.imp += c.imp; st.somma += c.somma; st.rimb += c.rimb; st.aut += c.aut; }
     for (const k of ['tot', 'imp', 'somma', 'rimb', 'aut']) st[k] = r2(st[k]);
     st.p20 = r2(st.tot * 0.2); st.epap = p.epap ? r2(st.imp * 0.04) : 0; st.accant = st.rimb;
@@ -912,9 +914,9 @@
     const p = byId('periodi', id);
     if (!p) return h('div', { class: 'empty' }, 'Periodo non trovato.');
     const T = ENT.periodi.title(p), qEnd = p.chiusura || L.today();
-    const ids = new Set(rows('piano').filter((r) => r.periodo === id).map((r) => r.azienda).concat(rows('ispezioni').filter((r) => r.periodo === id && r.azienda).map((r) => r.azienda)));
+    const ids = new Set(rows('piano').filter((r) => r.periodo === id).map((r) => r.azienda).concat(rows('ispezioni').filter((r) => inPer(r, p) && r.azienda).map((r) => r.azienda)));
     const list = [...ids].map((a) => byId('aziende', a)).filter(Boolean).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
-    const ispOf = (aid) => rows('ispezioni').find((i) => i.azienda === aid && i.periodo === id);
+    const ispOf = (aid) => rows('ispezioni').find((i) => i.azienda === aid && inPer(i, p));
     const pianoOf = (aid) => rows('piano').find((i) => i.azienda === aid && i.periodo === id);
     const setP = (k, v) => { p[k] = v; p.updated = NOW(); save(); };
     const fld = (label, el) => h('div', { class: 'fld' }, h('label', {}, label), el);
@@ -986,7 +988,7 @@
           cand.length && h('button', { type: 'button', class: 'pri', onclick: () => { rows('piano').push({ id: uid(), azienda: pick.value, periodo: id, tipo: 'Annuale', campionamento: '', note: '', updated: NOW() }); save(); dlg.close(); route(); } }, 'Aggiungi'))));
       dlg.showModal();
     };
-    const notaRows = () => rows('ispezioni').filter((i) => i.periodo === id && i.azienda && i.stato !== 'Programmata').sort((a, b) => (a.data || '').localeCompare(b.data || '')).map((i) => {
+    const notaRows = () => rows('ispezioni').filter((i) => inPer(i, p) && i.azienda && i.stato !== 'Programmata').sort((a, b) => (a.data || '').localeCompare(b.data || '')).map((i) => {
       const a = azOf(i.azienda);
       return { operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) };
     });

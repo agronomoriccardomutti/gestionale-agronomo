@@ -73,3 +73,6 @@ table.g td.tot{font-weight:600;white-space:nowrap}
 .voto{display:inline-block;min-width:48px;text-align:center;font-weight:600;padding:3px 8px;border-radius:6px;background:var(--chip)}
 .voto.ok{background:#d9eedf;color:#1f6b3a}.voto.ko{background:#f6dedb;color:#a3322a}.voto.na{color:var(--mut)}
 @media (prefers-color-scheme:dark){.voto.ok{background:#1d3a28;color:#7fd49a}.voto.ko{background:#432421;color:#f08a80}}
+
+table.g tfoot td{font-weight:600;border-top:2px solid var(--bd);background:var(--chip)}
+table.g input[type=text]{width:100%}

@@ -1,6 +1,6 @@
 /* Service worker: l'app funziona offline. Cambia CACHE quando pubblichi una nuova versione. */
-const CACHE = 'gestionale-v7';
-const ASSETS = ['./', 'index.html', 'style.css', 'lib.js', 'app.js', 'config.js', 'manifest.webmanifest',
+const CACHE = 'gestionale-v8';
+const ASSETS = ['./', 'index.html', 'style.css', 'lib.js', 'app.js', 'config.js', 'nota-template.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

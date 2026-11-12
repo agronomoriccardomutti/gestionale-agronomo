@@ -95,3 +95,7 @@ In **Ispezioni** premi *Importa Modello 22* e scegli uno o più file `.xlsx` (ve
 ### Piano trimestre
 
 *Importa Modello 22* ora carica le aziende nel **Piano trimestre** (Ispezioni → Piano trimestre) senza creare ispezioni. Lì spunti le aziende da ispezionare: la spunta crea l'ispezione *Programmata*, togliendola la elimina (se non è già stata eseguita). Puoi cambiare tipo e data per ciascuna, usare *Spunta tutte / Togli tutte* e aggiungere a mano un'azienda già in archivio con *+ Azienda*.
+
+### Nota spese ispettori
+
+In **Ispezioni → Nota spese** scegli il periodo: compaiono le ispezioni eseguite con partenza, destinazione, km, km extra, altre spese e complessità (il compenso si calcola: Basso 80 · Medio 90 · Alto 110 · Altro combinato 40 · Altro singolo 70; km a 0,30 €). *Scarica Excel* compila il modello EcoGruppo (`nota-template.js`, vuoto) con le formule originali. Il luogo di partenza predefinito si cambia in Impostazioni.

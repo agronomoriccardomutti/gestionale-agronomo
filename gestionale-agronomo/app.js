@@ -144,6 +144,7 @@
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.ragione, cols: ['codice', 'comune', 'telefono'],
     },
+    nota: { label: 'Nota spese', one: 'nota spese', order: { k: 'updated', dir: -1 }, fields: [], title: () => 'Nota spese', cols: [] },
     piano: { label: 'Piano trimestre', one: 'voce del piano', order: { k: 'updated', dir: -1 }, fields: [], title: (r) => lab('aziende', r.azienda), cols: [] },
     ispezioni: {
       label: 'Ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
@@ -157,7 +158,12 @@
         { k: 'trimestre', l: 'Trimestre (Modello 22)', t: 'text' },
         { k: 'campionamento', l: 'Campionamento', t: 'text' },
         { k: 'scadVerbale', l: 'Scadenza consegna verbale', t: 'date' },
-        { k: 'km', l: 'Km percorsi', t: 'number', step: '1' },
+        { k: 'km', l: 'Km percorsi (ordinari)', t: 'number', step: '1' },
+        { k: 'kmExtra', l: 'Km extra', t: 'number', step: '1' },
+        { k: 'altreSpese', l: 'Altre spese (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'complessita', l: 'Complessità controllo', t: 'select', opts: Object.keys(L.TARIFFE) },
+        { k: 'destinazione', l: 'Destinazione (nota spese)', t: 'text' },
+        { k: 'partenza', l: 'Luogo di partenza (se diverso)', t: 'text' },
         { k: 'compenso', l: 'Compenso (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.azienda ? lab('aziende', r.azienda) : 'Ispezione'),
@@ -302,7 +308,7 @@
     { id: 'oggi', label: 'Oggi', icon: '📅' },
     { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
-    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'piano', 'aziende'] },
+    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'piano', 'nota', 'aziende'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
@@ -313,7 +319,7 @@
   function normalize(o) {
     o = o && typeof o === 'object' ? o : {};
     o.version = 1;
-    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000 }, o.settings);
+    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, partenza: 'San Salvatore Monferrato' }, o.settings);
     o.data = o.data && typeof o.data === 'object' ? o.data : {};
     o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', deleted: [] }, o.meta);
     if (!Array.isArray(o.meta.deleted)) o.meta.deleted = [];
@@ -581,10 +587,10 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'piano' ? viewPiano() : viewList(ek);
+    const body = ek === 'piano' ? viewPiano() : ek === 'nota' ? viewNota() : viewList(ek);
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
-      mod.id === 'ispezioni' && ek !== 'piano' && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
+      mod.id === 'ispezioni' && (ek === 'ispezioni' || ek === 'aziende') && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
       body);
   }
@@ -654,7 +660,8 @@
         set('alarmDays', 'Avviso: giorni prima', 'number', { min: 0, step: 1 }),
         set('alarmTime', 'Ora dell\'avviso (eventi senza orario)', 'time'),
         set('durationMin', 'Durata predefinita eventi (min)', 'number', { min: 15, step: 15 }),
-        set('soglia', 'Soglia ricavi forfettario (€)', 'number', { min: 0, step: 1000 })),
+        set('soglia', 'Soglia ricavi forfettario (€)', 'number', { min: 0, step: 1000 }),
+        set('partenza', 'Luogo di partenza (nota spese)', 'text')),
       h('p', { class: 'note' }, 'Gli eventi esportati hanno un identificativo stabile: se li reimporti dopo averli modificati, il Calendario li aggiorna invece di duplicarli.'),
       syncSection(),
       h('h3', {}, 'Backup dei dati'),
@@ -872,6 +879,73 @@
       h('div', { class: 'bar' }, btn('Spunta tutte', all(true), ''), btn('Togli tutte', all(false), '')),
       h('p', { class: 'note' }, 'Spunta le aziende da ispezionare: per ognuna si crea l’ispezione (Programmata). Metti la data quando la fissi; finché è vuota vale la fine del trimestre (' + L.fmtDate(qEnd) + ').'),
       h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, h('tr', {}, h('th', {}, '✓'), h('th', {}, 'Azienda'), h('th', {}, 'Tipo'), h('th', {}, 'Data'), h('th', {}, 'Dal Modello 22'))), h('tbody', {}, rowsEls))));
+    refresh();
+    return root;
+  }
+
+  /* ---------- Nota spese ispettori (modello EcoGruppo) ---------- */
+  const loadNotaTemplate = () => new Promise((ok, ko) => {
+    if (window.NOTA_TEMPLATE) return ok();
+    const sc = document.createElement('script'); sc.src = 'nota-template.js'; sc.onload = ok; sc.onerror = () => ko(new Error('Modello non disponibile (sei offline?)'));
+    document.head.append(sc);
+  });
+  function viewNota() {
+    const t = L.today();
+    if (!ui.nd) { const d = L.parse(t); ui.nd = L.iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)); ui.na = t; }
+    const dal = h('input', { type: 'date', value: ui.nd, 'aria-label': 'Dal', onchange: (e) => { ui.nd = e.target.value || ui.nd; route(); } });
+    const al = h('input', { type: 'date', value: ui.na, 'aria-label': 'Al', onchange: (e) => { ui.na = e.target.value || ui.na; route(); } });
+    const inc = h('input', { type: 'checkbox', 'aria-label': 'Includi programmate', onchange: (e) => { ui.nProg = e.target.checked; route(); } }); inc.checked = !!ui.nProg;
+    const list = rows('ispezioni').filter((i) => i.azienda && i.data >= ui.nd && i.data <= ui.na && (ui.nProg || i.stato !== 'Programmata')).sort((a, b) => a.data.localeCompare(b.data));
+    const defP = db.settings.partenza || '';
+    const rowOf = (i) => { const a = byId('aziende', i.azienda) || {}; return { operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || defP, destinazione: i.destinazione || a.comune || '',
+      km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '' }; };
+    const tot = h('tr', {}); const calc = new Map();
+    const refresh = () => {
+      let k = 0, sp = 0, al2 = 0, co = 0, to = 0;
+      for (const i of list) {
+        const c = L.notaCalc(rowOf(i)), cells = calc.get(i.id);
+        cells.km.textContent = L.num(c.kmTot); cells.sp.textContent = L.eur(c.speseKm); cells.co.textContent = c.compenso == null ? '—' : L.num(c.compenso); cells.to.textContent = c.totale == null ? '—' : L.eur(c.totale);
+        k += c.kmTot; sp += c.speseKm; al2 += c.altre; co += c.compenso || 0; to += c.totale || 0;
+      }
+      tot.replaceChildren(h('td', { colspan: 5 }, 'TOTALI'), h('td'), h('td', {}, L.num(k)), h('td', {}, L.eur(sp)), h('td', {}, L.eur(al2)), h('td'), h('td', {}, L.eur(co)), h('td', {}, L.eur(to)));
+    };
+    const txt = (i, key, ph, w) => { const el = h('input', { type: 'text', value: i[key] || '', placeholder: ph, style: 'min-width:' + w + 'px', onchange: (e) => { i[key] = e.target.value.trim(); i.updated = NOW(); save(); } }); return el; };
+    const numIn = (i, key) => h('input', { type: 'number', inputmode: 'decimal', step: key === 'altreSpese' ? '0.01' : '1', min: '0', class: 'score', value: i[key] == null || i[key] === '' ? '' : i[key],
+      onchange: (e) => { const v = e.target.value.replace(',', '.'); i[key] = v === '' ? '' : Number(v); i.updated = NOW(); save(); refresh(); } });
+    const body = list.map((i) => {
+      const a = byId('aziende', i.azienda) || {};
+      const cs = h('select', { 'aria-label': 'Complessità', onchange: (e) => { i.complessita = e.target.value; if (L.TARIFFE[i.complessita] != null) i.compenso = L.TARIFFE[i.complessita]; i.updated = NOW(); save(); refresh(); } },
+        h('option', { value: '' }, '—'), Object.keys(L.TARIFFE).map((k) => h('option', { value: k }, k))); cs.value = i.complessita || '';
+      const cells = { km: h('td'), sp: h('td'), co: h('td'), to: h('td', { class: 'tot' }) }; calc.set(i.id, cells);
+      const part = txt(i, 'partenza', defP, 150), dest = h('input', { type: 'text', value: i.destinazione || a.comune || '', style: 'min-width:130px', onchange: (e) => { i.destinazione = e.target.value.trim(); i.updated = NOW(); save(); } });
+      return h('tr', {}, h('td', { class: 'nm' }, a.ragione || '?', h('div', { class: 'note' }, [L.fmtDate(i.data), a.codice].filter(Boolean).join(' · '))), h('td', {}, part), h('td', {}, dest),
+        h('td', {}, numIn(i, 'km')), h('td', {}, numIn(i, 'kmExtra')), cells.km, cells.sp, h('td', {}, numIn(i, 'altreSpese')), h('td', {}, cs), cells.co, cells.to);
+    });
+    const download = async () => {
+      try {
+        if (!list.length) return toast('Nessuna ispezione nel periodo');
+        await loadNotaTemplate();
+        const bin = atob(window.NOTA_TEMPLATE), bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        const out = await L.buildNotaSpese(bytes, { periodo: L.periodoLabel(ui.nd, ui.na), righe: list.map(rowOf) });
+        const url = URL.createObjectURL(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = h('a', { href: url, download: 'Nota_Spese_' + ui.nd.slice(0, 7) + '_' + ui.na.slice(0, 7) + '.xlsx' }); document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        toast(list.length > 22 ? 'Attenzione: il modello ha 22 righe, le altre sono escluse' : 'Nota spese scaricata');
+      } catch (e) { toast('Errore: ' + e.message); }
+    };
+    const copy = () => {
+      const lines = [['Operatore', 'Codice', 'Data', 'Partenza', 'Destinazione', 'Km ordinari', 'Km extra', 'Km totali', 'Spese km', 'Altre spese', 'Complessità', 'Compenso', 'Totale'].join('\t')];
+      for (const i of list) { const r = rowOf(i), c = L.notaCalc(r); lines.push([r.operatore, r.codice, L.fmtDate(r.data), r.partenza, r.destinazione, r.km || 0, r.kmExtra || 0, c.kmTot, String(c.speseKm).replace('.', ','), String(c.altre).replace('.', ','), r.complessita, c.compenso == null ? '' : c.compenso, c.totale == null ? '' : String(c.totale).replace('.', ',')].join('\t')); }
+      showText('Nota spese (tabella)', lines.join('\n'), 'Incolla in un foglio di calcolo.');
+    };
+    const root = h('div', {}, h('div', { class: 'bar' }, h('label', { class: 'note' }, 'Dal ', dal), h('label', { class: 'note' }, 'Al ', al), h('label', { class: 'note' }, inc, ' anche programmate')),
+      h('div', { class: 'bar' }, btn('⬇️ Scarica Excel (modello EcoGruppo)', download, 'pri'), btn('Copia tabella', copy, '')),
+      h('p', { class: 'note' }, 'Ispezioni dal ' + L.fmtDate(ui.nd) + ' al ' + L.fmtDate(ui.na) + ' (' + L.periodoLabel(ui.nd, ui.na) + '). Km a ' + L.eur(L.KM_EURO) + '/km; compenso in base alla complessità (Basso 80 · Medio 90 · Alto 110 · Altro combinato 40 · Altro singolo 70). Le modifiche si salvano nell\'ispezione.'));
+    if (!list.length) { root.append(h('div', { class: 'empty' }, 'Nessuna ispezione eseguita in questo periodo. Cambia le date o segna le ispezioni come eseguite.')); return root; }
+    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g', style: 'min-width:980px' },
+      h('thead', {}, h('tr', {}, ['Operatore', 'Partenza', 'Destinazione', 'Km ord.', 'Km extra', 'Km tot.', 'Spese km', 'Altre spese €', 'Complessità', 'Compenso', 'Totale'].map((x) => h('th', {}, x)))),
+      h('tbody', {}, body), h('tfoot', {}, tot))));
+    if (list.length > 22) root.append(h('p', { class: 'note' }, '⚠️ Il modello ha 22 righe: nel file Excel finiscono le prime 22.'));
     refresh();
     return root;
   }

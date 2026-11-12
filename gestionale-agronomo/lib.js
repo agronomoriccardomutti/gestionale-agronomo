@@ -201,5 +201,99 @@
   }
   const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9à-ú]/g, '');
 
-  return { quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+
+  /* ---------- Nota spese ispettori (EcoGruppo): compilazione del modello .xlsx ---------- */
+  const TARIFFE = { Basso: 80, Medio: 90, Alto: 110, 'Altro combinato': 40, 'Altro singolo': 70 };
+  const KM_EURO = 0.3;
+  const r2 = (x) => Math.round(x * 100) / 100;
+  function notaCalc(r) {
+    const kmTot = (+r.km || 0) + (+r.kmExtra || 0), speseKm = r2(kmTot * KM_EURO), altre = +r.altre || 0;
+    const compenso = TARIFFE[r.complessita] == null ? null : TARIFFE[r.complessita];
+    return { kmTot, speseKm, altre, compenso, totale: r.complessita ? r2(speseKm + altre + (compenso || 0)) : null };
+  }
+  function periodoLabel(dal, al) {
+    const M = ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'];
+    const a = parse(dal), b = parse(al);
+    if (a.getFullYear() === b.getFullYear()) return a.getMonth() === b.getMonth() ? M[a.getMonth()] + ' ' + a.getFullYear() : M[a.getMonth()] + '-' + M[b.getMonth()] + ' ' + a.getFullYear();
+    return M[a.getMonth()] + ' ' + a.getFullYear() + '-' + M[b.getMonth()] + ' ' + b.getFullYear();
+  }
+  const crcT = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = (b) => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  async function unzipAll(buf) {
+    const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let e = -1; for (let i = b.length - 22; i >= 0; i--) if (dv.getUint32(i, true) === 0x06054b50) { e = i; break; }
+    if (e < 0) throw new Error('Modello non valido');
+    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const out = [], dec = new TextDecoder();
+    for (let i = 0; i < n; i++) {
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+      const name = dec.decode(b.subarray(p + 46, p + 46 + nl)); p += 46 + nl + xl + cl;
+      const start = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true), raw = b.subarray(start, start + csize);
+      out.push({ name, data: method === 0 ? raw.slice() : await inflateRaw(raw) });
+    }
+    return out;
+  }
+  function zipStore(files) {
+    const enc = new TextEncoder(), parts = [], cd = []; let off = 0;
+    for (const f of files) {
+      const nm = enc.encode(f.name), crc = crc32(f.data), lh = new Uint8Array(30), cv = new DataView(lh.buffer);
+      cv.setUint32(0, 0x04034b50, true); cv.setUint16(4, 20, true); cv.setUint32(14, crc, true); cv.setUint32(18, f.data.length, true); cv.setUint32(22, f.data.length, true); cv.setUint16(26, nm.length, true);
+      const ch = new Uint8Array(46), dv = new DataView(ch.buffer);
+      dv.setUint32(0, 0x02014b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 20, true); dv.setUint32(16, crc, true); dv.setUint32(20, f.data.length, true); dv.setUint32(24, f.data.length, true); dv.setUint16(28, nm.length, true); dv.setUint32(42, off, true);
+      parts.push(lh, nm, f.data); cd.push(ch, nm); off += 30 + nm.length + f.data.length;
+    }
+    const cdLen = cd.reduce((a, x) => a + x.length, 0), end = new Uint8Array(22), ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, cdLen, true); ev.setUint32(16, off, true);
+    const all = [...parts, ...cd, end], res = new Uint8Array(all.reduce((a, x) => a + x.length, 0)); let q = 0; for (const x of all) { res.set(x, q); q += x.length; }
+    return res;
+  }
+  const xesc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const serial = (iso) => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000); };
+  /* Compila il modello: data = { periodo, righe: [{ operatore, codice, data, partenza, destinazione, km, kmExtra, altre, complessita }] } (max 22) */
+  async function buildNotaSpese(template, data) {
+    const files = await unzipAll(template), dec = new TextDecoder(), enc = new TextEncoder();
+    const sh = files.find((f) => f.name === 'xl/worksheets/sheet1.xml'); let x = dec.decode(sh.data);
+    const righe = (data.righe || []).slice(0, 22);
+    const num = (v) => '<v>' + String(+(+v).toFixed(6)) + '</v>';
+    const sty = {}; // stili dalla riga 5 (riga compilata)
+    const row5 = /<row r="5"[\s\S]*?<\/row>/.exec(x)[0]; row5.replace(/<c r="([A-Z]+)5"(?: s="(\d+)")?/g, (m, c, st) => { sty[c] = st; return m; });
+    let tKm = 0, tSp = 0, tAl = 0, tCo = 0, tTo = 0;
+    for (let i = 0; i < 22; i++) {
+      const r = 5 + i, d = righe[i], has = !!d;
+      x = x.replace(new RegExp('<row r="' + r + '"[\\s\\S]*?</row>'), (row) => row.replace(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, (m, col, attrs, inner) => {
+        const own = (/\ss="(\d+)"/.exec(attrs) || [])[1], s = has && sty[col] ? sty[col] : own, S = s ? ' s="' + s + '"' : '', ref = col + r;
+        const txt = (v) => (v === '' || v == null ? '<c r="' + ref + '"' + S + '/>' : '<c r="' + ref + '"' + S + ' t="inlineStr"><is><t xml:space="preserve">' + xesc(v) + '</t></is></c>');
+        const nn = (v) => (v === '' || v == null ? '<c r="' + ref + '"' + S + '/>' : '<c r="' + ref + '"' + S + '>' + num(v) + '</c>');
+        const f = (/<f[^>]*?(?:\/>|>[\s\S]*?<\/f>)/.exec(inner || '') || [''])[0];
+        const c = has ? notaCalc(d) : null;
+        switch (col) {
+          case 'A': return nn(has ? i + 1 : '');
+          case 'B': return txt(has ? d.operatore : '');
+          case 'C': return txt(has ? d.codice : '');
+          case 'D': return has && d.data ? '<c r="' + ref + '"' + S + '>' + '<v>' + serial(d.data) + '</v></c>' : '<c r="' + ref + '"' + S + '/>';
+          case 'E': return txt(has ? d.partenza : '');
+          case 'F': return txt(has ? d.destinazione : '');
+          case 'G': return has ? nn(+d.km || 0) : nn('');
+          case 'H': return has ? nn(+d.kmExtra || 0) : nn('');
+          case 'K': return has ? nn(+d.altre || 0) : nn('');
+          case 'L': return txt(has ? d.complessita : '');
+          case 'I': return '<c r="' + ref + '"' + S + '>' + f + num(has ? c.kmTot : 0) + '</c>';
+          case 'J': return '<c r="' + ref + '"' + S + '>' + f + num(has ? c.speseKm : 0) + '</c>';
+          case 'M': return has && c.compenso != null ? '<c r="' + ref + '"' + S + '>' + f + num(c.compenso) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v xml:space="preserve"> </v></c>';
+          case 'N': return has && c.totale != null ? '<c r="' + ref + '"' + S + '>' + f + num(c.totale) + '</c>' : '<c r="' + ref + '"' + S + ' t="str">' + f + '<v></v></c>';
+          default: return m;
+        }
+      }));
+      if (has) { const c = notaCalc(d); tKm += c.kmTot; tSp += c.speseKm; tAl += c.altre; tCo += c.compenso || 0; tTo += c.totale || 0; }
+    }
+    const setTot = (col, v) => { x = x.replace(new RegExp('(<c r="' + col + '27"[^>]*>(?:<f>[^<]*</f>))<v>[^<]*</v>'), '$1' + num(v)); };
+    setTot('I', tKm); setTot('J', tSp); setTot('K', tAl); setTot('M', tCo); setTot('N', tTo);
+    // periodo (I2): stringa inline nello stile della cella
+    x = x.replace(/<c r="I2"([^>]*?)(?:\/>|>[\s\S]*?<\/c>)/, (m, a) => '<c r="I2"' + a.replace(/\s+t="\w+"/, '').replace(/\/$/, '') + ' t="inlineStr"><is><t xml:space="preserve">' + xesc(data.periodo || '') + '</t></is></c>');
+    sh.data = enc.encode(x);
+    const wb = files.find((f) => f.name === 'xl/workbook.xml');
+    wb.data = enc.encode(dec.decode(wb.data).replace(/<calcPr[^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1"/>'));
+    return zipStore(files);
+  }
+
+  return { TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

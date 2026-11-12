@@ -470,6 +470,8 @@
     const prev = h('div'); const btns = h('div', { class: 'dlg-btns' });
     let state = null;
     const close = () => dlg.close();
+    const fail = (m) => { status.textContent = m; status.style.color = 'var(--warn, #c0392b)'; };
+    const curQ = () => { const d = new Date(); return { n: Math.floor(d.getMonth() / 3) + 1, y: d.getFullYear() }; };
     const findAz = (o) => rows('aziende').find((a) => (a.codice && a.codice.toUpperCase() === o.codice.toUpperCase()) || L.normName(a.ragione) === L.normName(o.ragione));
     const draw = () => {
       const tri = h('input', { type: 'text', value: state.trimestre });
@@ -483,15 +485,16 @@
           h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'ispezione già presente' : az ? 'cliente esistente' : 'NUOVO cliente'));
       });
       const nuovi = state.ops.filter((o) => !findAz(o)).length;
-      status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi importare.';
+      status.style.color = ''; status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi importare.';
       prev.replaceChildren(
         h('div', { class: 'fld' }, h('label', {}, 'Trimestre'), tri), h('div', { class: 'fld' }, h('label', {}, 'Data provvisoria ispezioni (poi la aggiorni per ciascuna)'), lim),
         h('div', { class: 'scroll', style: 'max-height:40vh' }, h('table', { class: 'g', style: 'min-width:0' }, h('tbody', {}, trs))));
       btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Annulla'),
         h('button', { type: 'button', class: 'pri', onclick: () => {
           const sel = checks.filter(([cb]) => cb.checked).map(([, o]) => o);
-          if (!sel.length) return toast('Nessun operatore selezionato');
-          if (!lim.value) return toast('Indica la data provvisoria');
+          if (!sel.length) return fail('Nessun operatore selezionato: metti almeno una spunta.');
+          if (!tri.value.trim()) return fail('Scrivi il trimestre (es. 4° trim. 2026).');
+          if (!lim.value) lim.value = L.quarterEnd(L.quarterFromText(tri.value, 0) || curQ());
           let na = 0, ni = 0; const now = NOW();
           for (const o of sel) {
             let az = findAz(o);
@@ -511,7 +514,7 @@
         for (const f of fileIn.files) ms.push(L.parseModello22(await L.xlsxCells(await f.arrayBuffer())));
         if (!ms.length) return;
         const m = L.mergeModelli(ms);
-        state = { ops: m.operatori, trimestre: m.trimestre, limite: L.quarterEnd(m.quarter), nfile: ms.length };
+        state = { ops: m.operatori, trimestre: m.trimestre, limite: L.quarterEnd(m.quarter || L.quarterFromText(m.trimestre, 0) || curQ()), nfile: ms.length };
         draw();
       } catch (e) { status.textContent = 'Errore: ' + e.message; prev.replaceChildren(); btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Chiudi')); }
     });

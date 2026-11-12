@@ -155,6 +155,7 @@
     const q = /(\d)\s*['’´`°]?\s*-\s*(\d{2})\b/.exec(intest);
     if (q) { out.quarter = { n: +q[1], y: 2000 + +q[2] }; out.trimestre = q[1] + '° trim. ' + (2000 + +q[2]); }
     out.controllore = clean(cells.H5);
+    if (!out.quarter) { const q2 = quarterFromText(intest, 0); if (q2) { out.quarter = q2.y ? q2 : null; out.mesi = true; } }
     for (let r = h0 + 1; r < h0 + 60; r++) {
       const nome = clean(cells['B' + r]), cod = clean(cells['C' + r]);
       if (!nome) { if (clean(cells['A' + r]).indexOf('Tabella 2') === 0) break; continue; }
@@ -163,7 +164,18 @@
       out.operatori.push(Object.assign(sp, { codice: cod, tipologia: clean(cells['D' + r]), campionamento: [clean(cells['E' + r]), clean(cells['F' + r])].filter(Boolean).join(' – '), note: clean(cells['G' + r]) }));
     }
     for (const k of keys) { const m = /Luogo e data:\s*\S+\s+(\d{1,2})[_\-\/.](\d{1,2})[_\-\/.](\d{4})/.exec(clean(cells[k])); if (m && !out.consegna) out.consegna = m[3] + '-' + pad(+m[2]) + '-' + pad(+m[1]); }
+    if (out.mesi && !out.trimestre) { const q3 = quarterFromText(intest, out.consegna ? +out.consegna.slice(0, 4) : 0); if (q3) { out.quarter = q3; out.trimestre = q3.n + '° trim. ' + q3.y; } }
     return out;
+  }
+  const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  /* "Ottobre - Dicembre", "ott-dic 2026", "4° trimestre 2026" -> { n, y } (y = anno di riserva se non indicato) */
+  function quarterFromText(t, yearHint) {
+    t = String(t || '').toLowerCase();
+    const y = (/\b(20\d{2})\b/.exec(t) || [])[1];
+    let n = null; const mi = MESI.findIndex((m) => t.indexOf(m) >= 0 || new RegExp('\\b' + m.slice(0, 3) + '\\b').test(t));
+    if (mi >= 0) n = Math.floor(mi / 3) + 1;
+    else { const q = /\b([1-4])\s*[°º^]?\s*(?:trim|tr\b)/.exec(t); if (q) n = +q[1]; }
+    return n ? { n, y: y ? +y : (yearHint || new Date().getFullYear()) } : null;
   }
   const quarterEnd = (q) => (q ? iso(new Date(q.y, q.n * 3, 0)) : '');
   function tipoDaNote(note) {
@@ -189,5 +201,5 @@
   }
   const normName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9à-ú]/g, '');
 
-  return { xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+  return { quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

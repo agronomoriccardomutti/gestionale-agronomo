@@ -49,3 +49,11 @@ test('mergeModelli unisce per codice e quarterEnd', () => {
   assert.strictEqual(L.quarterEnd({ n: 2, y: 2026 }), '2026-06-30'); assert.strictEqual(L.quarterEnd({ n: 4, y: 2026 }), '2026-12-31');
 });
 test('file non valido', async () => { await assert.rejects(() => L.xlsxCells(new Uint8Array(50)), /xlsx/); });
+
+test('intestazione con mesi ("Ottobre - Dicembre") invece di 4\'-26', async () => {
+  const S2 = S.slice(); S2[0] = 'RICCARDO ROSSI  Ottobre - Dicembre';
+  const c2 = cells.map(([r, v]) => [r, v === S[0] ? S2[0] : v]);
+  const m = L.parseModello22(await L.xlsxCells(xlsx(S2, c2)));
+  assert.strictEqual(m.quarter.n, 4); assert.strictEqual(m.trimestre, '4° trim. 2026');
+  assert.strictEqual(L.quarterEnd(m.quarter), '2026-12-31');
+});

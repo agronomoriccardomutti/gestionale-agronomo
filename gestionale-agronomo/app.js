@@ -144,6 +144,7 @@
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.ragione, cols: ['codice', 'comune', 'telefono'],
     },
+    piano: { label: 'Piano trimestre', one: 'voce del piano', order: { k: 'updated', dir: -1 }, fields: [], title: (r) => lab('aziende', r.azienda), cols: [] },
     ispezioni: {
       label: 'Ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
       fields: [
@@ -301,7 +302,7 @@
     { id: 'oggi', label: 'Oggi', icon: '📅' },
     { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
-    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'aziende'] },
+    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['ispezioni', 'piano', 'aziende'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
@@ -469,37 +470,34 @@
     const findAz = (o) => rows('aziende').find((a) => (a.codice && a.codice.toUpperCase() === o.codice.toUpperCase()) || L.normName(a.ragione) === L.normName(o.ragione));
     const draw = () => {
       const tri = h('input', { type: 'text', value: state.trimestre });
-      const lim = h('input', { type: 'date', value: state.limite });
       const checks = [];
       const trs = state.ops.map((o) => {
         const az = findAz(o);
-        const dup = az && rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === state.trimestre);
+        const dup = az && (rows('piano').some((i) => i.azienda === az.id && i.trimestre === state.trimestre) || rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === state.trimestre));
         const cb = h('input', { type: 'checkbox', 'aria-label': 'Importa ' + o.ragione }); cb.checked = !dup; cb.disabled = !!dup; checks.push([cb, o]);
         return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, o.ragione, h('div', { class: 'note' }, [o.comune, o.codice].filter(Boolean).join(' · '))),
-          h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'ispezione già presente' : az ? 'cliente esistente' : 'NUOVO cliente'));
+          h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'già nel piano' : az ? 'cliente esistente' : 'NUOVO cliente'));
       });
       const nuovi = state.ops.filter((o) => !findAz(o)).length;
       status.style.color = ''; status.textContent = state.ops.length + ' operatori da ' + state.nfile + ' file · ' + nuovi + ' nuovi clienti. Togli la spunta a chi non vuoi importare.';
       prev.replaceChildren(
-        h('div', { class: 'fld' }, h('label', {}, 'Trimestre'), tri), h('div', { class: 'fld' }, h('label', {}, 'Data provvisoria ispezioni (poi la aggiorni per ciascuna)'), lim),
+        h('div', { class: 'fld' }, h('label', {}, 'Trimestre'), tri),
         h('div', { class: 'scroll', style: 'max-height:40vh' }, h('table', { class: 'g', style: 'min-width:0' }, h('tbody', {}, trs))));
       btns.replaceChildren(h('button', { type: 'button', onclick: close }, 'Annulla'),
         h('button', { type: 'button', class: 'pri', onclick: () => {
           const sel = checks.filter(([cb]) => cb.checked).map(([, o]) => o);
           if (!sel.length) return fail('Nessun operatore selezionato: metti almeno una spunta.');
           if (!tri.value.trim()) return fail('Scrivi il trimestre (es. 4° trim. 2026).');
-          if (!lim.value) lim.value = L.quarterEnd(L.quarterFromText(tri.value, 0) || curQ());
           let na = 0, ni = 0; const now = NOW();
           for (const o of sel) {
             let az = findAz(o);
             if (!az) { az = { id: uid(), ragione: o.ragione, comune: o.comune, codice: o.codice, updated: now }; rows('aziende').push(az); na++; }
             else { if (!az.codice) az.codice = o.codice; if (!az.comune && o.comune) az.comune = o.comune; az.updated = now; }
-            if (rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === tri.value.trim())) continue;
-            rows('ispezioni').push({ id: uid(), data: lim.value, azienda: az.id, tipo: L.tipoDaNote(o.note), norma: 'Reg. UE 848/2018', stato: 'Programmata',
-              trimestre: tri.value.trim(), campionamento: o.campionamento, note: o.note, updated: now }); ni++;
+            if (rows('piano').some((i) => i.azienda === az.id && i.trimestre === tri.value.trim())) continue;
+            rows('piano').push({ id: uid(), azienda: az.id, trimestre: tri.value.trim(), tipo: L.tipoDaNote(o.note), campionamento: o.campionamento, note: o.note, updated: now }); ni++;
           }
-          save(); close(); route(); toast(ni + ' ispezioni create, ' + na + ' nuovi clienti');
-        } }, 'Importa'));
+          ui.tri = tri.value.trim(); save(); close(); location.hash = '#/ispezioni/piano'; route(); toast(ni + ' aziende nel piano, ' + na + ' nuove');
+        } }, 'Importa nel piano'));
     };
     fileIn.addEventListener('change', async () => {
       try {
@@ -583,11 +581,12 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
+    const body = ek === 'piano' ? viewPiano() : viewList(ek);
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
-      mod.id === 'ispezioni' && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
+      mod.id === 'ispezioni' && ek !== 'piano' && h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
-      viewList(ek));
+      body);
   }
 
   function viewOggi() {
@@ -800,6 +799,80 @@
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }
     root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));
     studs.forEach(updateRow); renderStats();
+    return root;
+  }
+
+  /* ---------- Piano trimestre: aziende da ispezionare (flag) ---------- */
+  const triKey = (t) => { const q = L.quarterFromText(t, 0); return q ? q.y * 10 + q.n : 0; };
+  function viewPiano() {
+    const tris = [...new Set(rows('piano').map((r) => r.trimestre).concat(rows('ispezioni').map((r) => r.trimestre)).filter(Boolean))].sort((a, b) => triKey(b) - triKey(a));
+    const root = h('div');
+    if (!tris.length) {
+      root.append(h('div', { class: 'empty' }, 'Nessun piano. Carica il Modello 22 del trimestre: poi spunti le aziende da ispezionare.'),
+        h('div', { class: 'bar' }, btn('📥 Importa Modello 22', openImport22, 'pri')));
+      return root;
+    }
+    if (!tris.includes(ui.tri)) ui.tri = tris[0];
+    const T = ui.tri, qEnd = L.quarterEnd(L.quarterFromText(T, 0));
+    const ids = new Set(rows('piano').filter((r) => r.trimestre === T).map((r) => r.azienda).concat(rows('ispezioni').filter((r) => r.trimestre === T && r.azienda).map((r) => r.azienda)));
+    const list = [...ids].map((id) => byId('aziende', id)).filter(Boolean).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
+    const ispOf = (aid) => rows('ispezioni').find((i) => i.azienda === aid && i.trimestre === T);
+    const pianoOf = (aid) => rows('piano').find((i) => i.azienda === aid && i.trimestre === T);
+    const tilesBox = h('div');
+    const refresh = () => {
+      const on = list.filter((a) => ispOf(a.id)), done = on.filter((a) => ispOf(a.id).stato !== 'Programmata').length;
+      tilesBox.replaceChildren(tiles([['Da ispezionare', on.length], ['Nel piano', list.length], ['Già eseguite', done]]));
+    };
+    const sel = h('select', { 'aria-label': 'Trimestre', onchange: (e) => { ui.tri = e.target.value; route(); } }, tris.map((t) => h('option', { value: t }, t)));
+    sel.value = T;
+    const rowsEls = list.map((a) => {
+      const p = pianoOf(a.id), i0 = ispOf(a.id), note = (p && p.note) || (i0 && i0.note) || '', camp = (p && p.campionamento) || (i0 && i0.campionamento) || '';
+      const cb = h('input', { type: 'checkbox', 'aria-label': 'Da ispezionare: ' + a.ragione }); cb.checked = !!i0;
+      const tipo = h('select', { 'aria-label': 'Tipo ispezione di ' + a.ragione }, ENT.ispezioni.fields.find((f) => f.k === 'tipo').opts.map((o) => h('option', { value: o }, o)));
+      tipo.value = (i0 && i0.tipo) || (p && p.tipo) || L.tipoDaNote(note);
+      const data = h('input', { type: 'date', 'aria-label': 'Data ispezione di ' + a.ragione, value: (i0 && i0.data) || '' });
+      data.addEventListener('change', () => { const x = ispOf(a.id); if (x) { x.data = data.value || qEnd; x.updated = NOW(); save(); } });
+      tipo.addEventListener('change', () => { const x = ispOf(a.id), q = pianoOf(a.id); if (x) { x.tipo = tipo.value; x.updated = NOW(); } if (q) { q.tipo = tipo.value; q.updated = NOW(); } save(); });
+      cb.addEventListener('change', () => {
+        const x = ispOf(a.id);
+        if (cb.checked && !x) {
+          rows('ispezioni').push({ id: uid(), data: data.value || qEnd, azienda: a.id, tipo: tipo.value, norma: 'Reg. UE 848/2018', stato: 'Programmata', trimestre: T, campionamento: camp, note, updated: NOW() });
+          if (!data.value) data.value = qEnd;
+        } else if (!cb.checked && x) {
+          if (x.stato !== 'Programmata') { cb.checked = true; return toast('Ispezione già eseguita: non si toglie dal piano'); }
+          dropWhere('ispezioni', (y) => y.id === x.id);
+        }
+        save(); refresh();
+      });
+      return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, a.ragione, h('div', { class: 'note' }, [a.comune, a.codice].filter(Boolean).join(' · '))), h('td', {}, tipo), h('td', {}, data),
+        h('td', { class: 'note', style: 'min-width:160px;white-space:normal' }, [camp && 'Campionamento: ' + camp, note].filter(Boolean).join(' — ')));
+    });
+    const all = (on) => () => {
+      for (const a of list) {
+        const x = ispOf(a.id), p = pianoOf(a.id), note = (p && p.note) || '';
+        if (on && !x) rows('ispezioni').push({ id: uid(), data: qEnd, azienda: a.id, tipo: (p && p.tipo) || L.tipoDaNote(note), norma: 'Reg. UE 848/2018', stato: 'Programmata', trimestre: T, campionamento: (p && p.campionamento) || '', note, updated: NOW() });
+        if (!on && x && x.stato === 'Programmata') dropWhere('ispezioni', (y) => y.id === x.id);
+      }
+      save(); route();
+    };
+    const addAz = () => {
+      const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+      const cand = rows('aziende').filter((a) => !ids.has(a.id)).sort((a, b) => a.ragione.localeCompare(b.ragione, 'it'));
+      const pick = h('select', {}, cand.map((a) => h('option', { value: a.id }, a.ragione + (a.comune ? ' (' + a.comune + ')' : ''))));
+      dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '+ Azienda nel piano ' + T),
+        cand.length ? h('div', { class: 'fld' }, h('label', {}, 'Scegli un’azienda già in archivio'), pick) : h('p', { class: 'note' }, 'Tutte le aziende in archivio sono già nel piano. Creane una nuova dalla scheda Aziende.'),
+        h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Chiudi'),
+          cand.length && h('button', { type: 'button', class: 'pri', onclick: () => {
+            rows('piano').push({ id: uid(), azienda: pick.value, trimestre: T, tipo: 'Annuale', campionamento: '', note: '', updated: NOW() });
+            save(); dlg.close(); route();
+          } }, 'Aggiungi'))));
+      dlg.showModal();
+    };
+    root.append(h('div', { class: 'bar' }, sel, btn('📥 Importa Modello 22', openImport22, 'pri'), btn('+ Azienda', addAz, '')), tilesBox,
+      h('div', { class: 'bar' }, btn('Spunta tutte', all(true), ''), btn('Togli tutte', all(false), '')),
+      h('p', { class: 'note' }, 'Spunta le aziende da ispezionare: per ognuna si crea l’ispezione (Programmata). Metti la data quando la fissi; finché è vuota vale la fine del trimestre (' + L.fmtDate(qEnd) + ').'),
+      h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, h('tr', {}, h('th', {}, '✓'), h('th', {}, 'Azienda'), h('th', {}, 'Tipo'), h('th', {}, 'Data'), h('th', {}, 'Dal Modello 22'))), h('tbody', {}, rowsEls))));
+    refresh();
     return root;
   }
 

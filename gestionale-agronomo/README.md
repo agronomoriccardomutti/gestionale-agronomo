@@ -91,3 +91,7 @@ MIT — vedi `LICENSE`.
 ## Ispezioni: importa il Modello 22 (EcoGruppo)
 
 In **Ispezioni** premi *Importa Modello 22* e scegli uno o più file `.xlsx` (versioni e integrazioni dello stesso trimestre). L'app unisce gli operatori per codice, crea i clienti nuovi (codice e tipologia compresi) e un'ispezione *Programmata* per ciascuno. Il tipo viene ricavato dalle note: "Non annunciata" → A sorpresa, "Aggiuntiva" → Supplementare, altrimenti Annuale. Prima di confermare puoi togliere la spunta a chi non vuoi importare. Rilanciando l'importazione non si creano doppioni (stessa azienda e stesso trimestre).
+
+### Piano trimestre
+
+*Importa Modello 22* ora carica le aziende nel **Piano trimestre** (Ispezioni → Piano trimestre) senza creare ispezioni. Lì spunti le aziende da ispezionare: la spunta crea l'ispezione *Programmata*, togliendola la elimina (se non è già stata eseguita). Puoi cambiare tipo e data per ciascuna, usare *Spunta tutte / Togli tutte* e aggiungere a mano un'azienda già in archivio con *+ Azienda*.

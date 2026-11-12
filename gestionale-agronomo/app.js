@@ -139,16 +139,10 @@
       fields: [
         { k: 'ragione', l: 'Ragione sociale', t: 'text', req: 1 },
         { k: 'codice', l: 'Cod. operatore (EcoGruppo)', t: 'text' },
-        { k: 'tipologia', l: 'Tipologia operatore', t: 'text', list: ['A', 'AB'] },
         { k: 'comune', l: 'Comune / località', t: 'text' },
-        { k: 'cuaa', l: 'CUAA / P.IVA', t: 'text' },
-        { k: 'referente', l: 'Referente', t: 'text' },
         { k: 'telefono', l: 'Telefono', t: 'tel' },
-        { k: 'colture', l: 'Colture / attività', t: 'text' },
-        { k: 'scadCert', l: 'Scadenza certificato', t: 'date' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => r.ragione, cols: ['codice', 'comune', 'referente', 'telefono', 'scadCert'],
-      events: (r) => (r.scadCert ? [{ date: r.scadCert, info: 1, title: 'Scade certificato: ' + r.ragione }] : []),
+      title: (r) => r.ragione, cols: ['codice', 'comune', 'telefono'],
     },
     ispezioni: {
       label: 'Ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
@@ -481,7 +475,7 @@
         const az = findAz(o);
         const dup = az && rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === state.trimestre);
         const cb = h('input', { type: 'checkbox', 'aria-label': 'Importa ' + o.ragione }); cb.checked = !dup; cb.disabled = !!dup; checks.push([cb, o]);
-        return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, o.ragione, h('div', { class: 'note' }, [o.comune, o.codice, o.tipologia].filter(Boolean).join(' · '))),
+        return h('tr', {}, h('td', {}, cb), h('td', { class: 'nm' }, o.ragione, h('div', { class: 'note' }, [o.comune, o.codice].filter(Boolean).join(' · '))),
           h('td', {}, L.tipoDaNote(o.note)), h('td', { class: 'note' }, dup ? 'ispezione già presente' : az ? 'cliente esistente' : 'NUOVO cliente'));
       });
       const nuovi = state.ops.filter((o) => !findAz(o)).length;
@@ -498,8 +492,8 @@
           let na = 0, ni = 0; const now = NOW();
           for (const o of sel) {
             let az = findAz(o);
-            if (!az) { az = { id: uid(), ragione: o.ragione, comune: o.comune, codice: o.codice, tipologia: o.tipologia, updated: now }; rows('aziende').push(az); na++; }
-            else { if (!az.codice) az.codice = o.codice; if (!az.tipologia) az.tipologia = o.tipologia; if (!az.comune && o.comune) az.comune = o.comune; az.updated = now; }
+            if (!az) { az = { id: uid(), ragione: o.ragione, comune: o.comune, codice: o.codice, updated: now }; rows('aziende').push(az); na++; }
+            else { if (!az.codice) az.codice = o.codice; if (!az.comune && o.comune) az.comune = o.comune; az.updated = now; }
             if (rows('ispezioni').some((i) => i.azienda === az.id && i.trimestre === tri.value.trim())) continue;
             rows('ispezioni').push({ id: uid(), data: lim.value, azienda: az.id, tipo: L.tipoDaNote(o.note), norma: 'Reg. UE 848/2018', stato: 'Programmata',
               trimestre: tri.value.trim(), campionamento: o.campionamento, note: o.note, updated: now }); ni++;

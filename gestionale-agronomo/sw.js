@@ -1,5 +1,5 @@
 /* Service worker: l'app funziona offline. Cambia CACHE quando pubblichi una nuova versione. */
-const CACHE = 'gestionale-v5';
+const CACHE = 'gestionale-v6';
 const ASSETS = ['./', 'index.html', 'style.css', 'lib.js', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

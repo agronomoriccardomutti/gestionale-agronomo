@@ -927,7 +927,7 @@
     const foot = h('tfoot'), boxes = h('div', { class: 'kv' }); const cellsOf = new Map();
     const refresh = () => {
       const st = periodoStats(p);
-      foot.replaceChildren(h('tr', {}, h('td', { colspan: 5 }, 'Σ'), h('td'), h('td', { class: 'r' }, L.eur(st.aut)), h('td', { class: 'r' }, L.eur(st.rimb)), h('td', { class: 'r' }, L.eur(st.somma)), h('td'), h('td', { class: 'r' }, L.eur(st.imp)), h('td', { class: 'r' }, L.eur(st.tot))));
+      foot.replaceChildren(h('tr', {}, h('td', { colspan: 5, class: 'sg' }, 'Σ'), h('td'), h('td', { class: 'r', 'data-l': 'Autostrada €' }, L.eur(st.aut)), h('td', { class: 'r', 'data-l': 'Rimborso km' }, L.eur(st.rimb)), h('td', { class: 'r', 'data-l': 'Somma rimborso' }, L.eur(st.somma)), h('td'), h('td', { class: 'r', 'data-l': 'Importo ispezione' }, L.eur(st.imp)), h('td', { class: 'r', 'data-l': 'Totale' }, L.eur(st.tot))));
       const kv = (l, v) => h('div', {}, h('small', {}, l), v);
       const epap = h('input', { type: 'checkbox', 'aria-label': 'Applica EPAP', onchange: (e) => { setP('epap', e.target.checked); refresh(); } }); epap.checked = !!p.epap;
       boxes.replaceChildren(kv('20%', L.eur(st.p20)), kv('EPAP (4%)', h('span', {}, L.eur(st.epap) + ' ', h('label', { class: 'note' }, epap, ' applica'))), kv('Da accantonare', L.eur(st.accant)));
@@ -935,7 +935,9 @@
     const upd = (x) => { const c = ispCalc(x), cs = cellsOf.get(x.id); if (!cs) return; cs.rimb.textContent = L.eur(c.rimb); cs.somma.textContent = L.eur(c.somma); cs.imp.value = c.imp; cs.tot.textContent = L.eur(c.tot); refresh(); };
     const numIn = (x, key, step) => h('input', { type: 'number', inputmode: 'decimal', step, min: '0', class: 'score', 'aria-label': key, value: x[key] == null || x[key] === '' ? '' : x[key],
       onchange: (e) => { const v = e.target.value.replace(',', '.'); x[key] = v === '' ? '' : Number(v); x.updated = NOW(); save(); upd(x); } });
-    const tbl = h('div', { class: 'scroll' });
+    const HEADS = ['✓', 'Operatore', 'Organizzazione', 'Data ispezione', 'Pagamento', 'Km', 'Autostrada €', 'Rimborso km', 'Somma rimborso', 'Complessità', 'Importo ispezione', 'Totale'];
+    const WIDTHS = [3, 16, 11, 10, 9, 6, 7, 7, 7, 8, 8, 8];
+    const tbl = h('div', { class: 'scroll tpw' });
     const draw = () => {
       cellsOf.clear();
       const trs = list.map((a) => {
@@ -966,8 +968,10 @@
           h('td', {}, pillSel(fieldOpts('ispezioni', 'pagamento'), x.pagamento || 'Da registrare', (v) => { x.pagamento = v; x.updated = NOW(); save(); }, 'Pagamento')),
           h('td', {}, numIn(x, 'km', '1')), h('td', {}, numIn(x, 'altreSpese', '0.01')), cs.rimb, cs.somma, h('td', {}, comp), h('td', {}, cs.imp), cs.tot);
       });
-      tbl.replaceChildren(h('table', { class: 'g', style: 'min-width:1100px' },
-        h('thead', {}, h('tr', {}, ['✓', 'Operatore', 'Organizzazione', 'Data ispezione', 'Pagamento', 'Km', 'Autostrada €', 'Rimborso km', 'Somma rimborso', 'Complessità', 'Importo ispezione', 'Totale'].map((x) => h('th', {}, x)))),
+      for (const tr of trs) if (!tr.classList.contains('off')) [...tr.children].forEach((td, k) => { td.dataset.l = HEADS[k]; });
+      tbl.replaceChildren(h('table', { class: 'g tp' },
+        h('colgroup', {}, WIDTHS.map((w) => h('col', { style: 'width:' + w + '%' }))),
+        h('thead', {}, h('tr', {}, HEADS.map((x) => h('th', {}, x)))),
         h('tbody', {}, trs), foot));
     };
     const all = (on) => () => {
@@ -1248,6 +1252,15 @@
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
       : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg)
       : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
+    fitTables(app);
+  }
+  // tabelle adattive: a tutta larghezza; su schermi stretti ogni riga diventa una scheda con le etichette delle colonne
+  function fitTables(root) {
+    for (const t of root.querySelectorAll('table.g:not(.tp)')) {
+      const hr = t.querySelector('thead tr:last-child'); if (!hr) continue;
+      const labs = [...hr.children].map((x) => x.textContent.trim()); t.classList.add('rs');
+      for (const tr of t.querySelectorAll('tbody tr')) [...tr.children].forEach((td, k) => { if (labs[k] && !td.dataset.l) td.dataset.l = labs[k]; });
+    }
   }
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); route(); });
   route();

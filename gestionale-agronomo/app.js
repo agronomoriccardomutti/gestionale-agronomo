@@ -290,12 +290,13 @@
         { k: 'classe', l: 'Classe', t: 'ref', to: 'classi', req: 1 },
         { k: 'titolo', l: 'Verifica (es. V01T)', t: 'text', req: 1 },
         { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'periodo', l: 'Periodo', t: 'select', opts: ['Trimestre', 'Pentamestre'] },
         { k: 'parti', l: 'Parti e punti massimi', t: 'parts' },
         { k: 'vmin', l: 'Voto minimo (con 0 punti)', t: 'number', step: '0.5', def: 3 },
         { k: 'vmax', l: 'Voto massimo (con tutti i punti)', t: 'number', step: '0.5', def: 9 },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.titolo || 'Verifica') + (r.classe ? ' – ' + lab('classi', r.classe) : ''),
-      cols: ['data'],
+      cols: ['data', 'periodo'],
       extra: (r) => ['Totale ' + L.num(maxTot(r)) + ' punti · voto ' + fmt1(rng(r).min) + '–' + fmt1(rng(r).max)],
       actions: [{ label: '✏️ Correggi', show: () => true, go: (r) => '#/scuola/correggi/' + r.id }],
       onDelete: (r) => dropWhere('valutazioni', (x) => x.verifica === r.id),
@@ -600,7 +601,7 @@
   }
 
   /* ---------- Viste ---------- */
-  const ui = { q: '', showDone: false };
+  const ui = { q: '', showDone: false, per: '' };
   const tile = (l, v, bad) => h('div', { class: 'tile' + (bad ? ' bad' : '') }, h('b', {}, v), h('span', {}, l));
   const tiles = (arr) => h('div', { class: 'tiles' }, arr.map(([l, v, b]) => tile(l, v, b)));
 
@@ -667,10 +668,12 @@
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
     const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
+    const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
+      ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
-      body);
+      extra, body);
   }
 
   function viewOggi() {
@@ -769,6 +772,50 @@
     const fin = val && typeof val.final === 'number' ? val.final : null;
     return { any, tot, hyp, fin, eff: fin !== null ? fin : hyp };
   }
+  const perOf = (v) => v.periodo || (v.data && +v.data.slice(5, 7) >= 9 ? 'Trimestre' : v.data ? 'Pentamestre' : 'Trimestre');
+  const CLASSI_STD = ['3°A', '3°B', '4°A', '4°B', '5°A', '5°B'];
+  const normCl = (n) => String(n || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+  function creaClassi() {
+    const have = new Set(rows('classi').map((c) => normCl(c.nome))); let n = 0;
+    for (const nome of CLASSI_STD) if (!have.has(normCl(nome))) { rows('classi').push({ id: uid(), nome, scuola: 'ITAS Leardi', materia: 'Genio Rurale', updated: NOW() }); n++; }
+    save(); route(); toast(n ? n + ' classi create' : 'Le classi ci sono già tutte');
+  }
+  const classChips = (cur, hrefOf) => h('div', { class: 'chips' }, rows('classi').slice().sort((a, b) => a.nome.localeCompare(b.nome, 'it')).map((c) => h('a', { class: 'chip' + (c.id === cur ? ' on' : ''), href: hrefOf(c) }, c.nome)));
+  const firstVer = (cid) => rows('verifiche').filter((v) => v.classe === cid).sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0];
+  function gradeLabel(x) {
+    let w = Math.floor(x + 1e-9), fr = Math.round((x - w) * 4);
+    if (fr >= 4) { w += 1; fr = 0; }
+    return fr === 3 ? w + '/' + (w + 1) : w + ['', '+', '½'][fr];
+  }
+  function gradeSelect(cur, onch, label) {
+    const vals = []; for (let x = 2; x <= 10.0001; x += 0.25) vals.push(Math.round(x * 100) / 100);
+    if (typeof cur === 'number' && !vals.includes(cur)) { vals.push(cur); vals.sort((a, b) => a - b); }
+    const el = h('select', { 'aria-label': label, onchange: (e) => onch(e.target.value === '' ? '' : +e.target.value) }, h('option', { value: '' }, '—'), vals.map((x) => h('option', { value: String(x) }, gradeLabel(x))));
+    el.value = typeof cur === 'number' ? String(cur) : ''; return el;
+  }
+  const fnum = (x) => String(Math.round(x * 100) / 100).replace('.', ',');
+  function buildMd(v) {
+    const c = byId('classi', v.classe) || {}, cl = String(c.nome || '').replace('°', ''), per = perOf(v), parts = v.parti || [], r = rng(v), tot = maxTot(v), today = L.today();
+    const studs = studentsOf(v.classe); const votes = []; let pres = 0; const lines = [];
+    for (const st of studs) {
+      const val = valOf(v.id, st.id) || {}, cv = calcVal(v, val), sc = val.scores || {}, ass = !!val.assente;
+      if (!ass) pres++; if (cv.eff !== null) votes.push(cv.eff);
+      lines.push('| [[' + st.nome + ']]' + (st.tag ? ' (' + st.tag + ')' : '') + ' | ' + (ass ? 'A' + (val.rec ? ' (rec. ' + L.fmtDate(val.rec) + ')' : '') : 'P') + ' | ' + parts.map((p) => (typeof sc[p.id] === 'number' ? fnum(sc[p.id]) : '')).join(' | ') + ' | ' + (cv.any ? fnum(cv.tot) : '') + ' | ' + (cv.hyp === null ? '' : fnum(cv.hyp)) + ' | ' + (cv.fin === null ? '' : fnum(cv.fin)) + ' |');
+    }
+    const avg = votes.length ? votes.reduce((a, x) => a + x, 0) / votes.length : null, suff = votes.filter((x) => x >= 6).length, n = studs.length;
+    const titolo = v.titolo || 'Verifica', mat = c.materia || 'Genio Rurale';
+    const head = '| Alunno | Presenza | ' + parts.map((p) => p.name + ' /' + fnum(p.max)).join(' | ') + ' | Totale | Voto ipotetico | Voto finale |';
+    const sep = '|---|:---:|' + new Array(parts.length + 4).join('---:|');
+    return ['---', 'tags: [scuola, verifica, ' + mat.toLowerCase().replace(/\s+/g, '-') + ', ' + cl.toLowerCase() + ', ' + (per === 'Trimestre' ? 'T' : 'P') + ']', 'tipo: verifica',
+      'titolo: "' + titolo + ' di ' + mat + '"', 'periodo: ' + per, 'data: ' + (v.data || ''), 'classe: ' + cl, 'punti_max: ' + fnum(tot), 'scala: ' + fnum(r.min) + '-' + fnum(r.max),
+      'voto_medio: ' + (avg === null ? '' : fnum(Math.round(avg * 10) / 10)), 'sufficienti: ' + suff, 'corretti: ' + votes.length, 'presenti: ' + pres, 'assenti: ' + (n - pres),
+      'data_creazione: ' + today, 'data_aggiornamento: ' + today, '---', '',
+      '# ' + titolo + ' di ' + mat + ' (' + cl + ', ' + per + ')', '',
+      'Registro della verifica per la classe ' + cl + '. Voto = ' + fnum(r.min) + ' + punti ÷ ' + fnum(tot) + ' × ' + fnum(r.max - r.min) + ', cioè da ' + fnum(r.min) + ' a ' + fnum(r.max) + '.', '',
+      '## Punti chiave', '', '- ' + fnum(tot) + ' punti totali: ' + parts.map((p) => p.name + ' ' + fnum(p.max)).join(', ') + '.', '- Presenza: P presente, A assente (con data del recupero se inserita).',
+      '- Alunni presenti: ' + pres + ' su ' + n + '; verifiche con voto: ' + votes.length + '.', '', '## Registro', '', head, sep, ...lines, '', '## Articoli correlati', '', '- [[indice_wiki]]', ''].join('\n');
+  }
+  const obsName = (v) => 'verifica-' + ((byId('classi', v.classe) || {}).materia || 'genio-rurale').toLowerCase().replace(/\s+/g, '-') + '-' + (v.titolo || 'verifica').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + String((byId('classi', v.classe) || {}).nome || '').replace('°', '').toLowerCase() + '.md';
   const votoCls = (x) => (x === null ? 'na' : x >= 6 ? 'ok' : 'ko');
   const votoEl = (x) => h('span', { class: 'voto ' + votoCls(x) }, x === null ? '—' : fmt1(x));
 
@@ -776,7 +823,9 @@
     const c = byId('classi', id);
     if (!c) return h('div', { class: 'empty' }, 'Classe non trovata.');
     const studs = studentsOf(id);
-    const vers = rows('verifiche').filter((v) => v.classe === id).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const allVers = rows('verifiche').filter((v) => v.classe === id).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const vers = ui.per ? allVers.filter((v) => perOf(v) === ui.per) : allVers;
+    const perChips = h('div', { class: 'chips' }, [['', 'Tutto l\'anno'], ['Trimestre', 'Trimestre'], ['Pentamestre', 'Pentamestre']].map(([k, l]) => h('a', { class: 'chip' + (ui.per === k ? ' on' : ''), href: '#/scuola/classe/' + id, onclick: (e) => { e.preventDefault(); ui.per = k; route(); } }, l)));
     const ta = h('textarea', { id: 'paste', placeholder: 'Rossi Marco\nBianchi Giulia\n…' });
     const addBox = h('div', { class: 'box' }, h('label', { for: 'paste' }, 'Aggiungi studenti: uno per riga (puoi incollare l\'elenco dal registro)'), ta,
       h('div', { class: 'bar' }, btn('Aggiungi alla classe', () => {
@@ -787,11 +836,11 @@
         }
         if (!n) return toast('Nessun nuovo nome da aggiungere');
         save(); route(); toast(n + ' studenti aggiunti');
-      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id }), '')));
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), h('h2', {}, '👥 ' + ENT.classi.title(c)), addBox);
+      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined }), '')));
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + ENT.classi.title(c)), perChips, addBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Nessuno studente. Incolla l\'elenco qui sopra.')); return root; }
     const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'),
-      vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data)))), h('th', {}, 'Media'), h('th', {}));
+      vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data) + ' · ' + (perOf(v) === 'Trimestre' ? 'T' : 'P')))), h('th', {}, 'Media'), h('th', {}));
     const body = studs.map((st) => {
       let sum = 0, n = 0;
       const cells = vers.map((v) => {
@@ -836,7 +885,7 @@
       const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
       t.tot.textContent = cv.any ? fmt1(cv.tot) : ''; t.hyp.replaceChildren(votoEl(cv.hyp));
     };
-    const head = h('tr', {}, h('th', {}, 'Studente'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
+    const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
       h('th', {}, 'Punti', h('div', { class: 'note' }, '/ ' + L.num(m))), h('th', {}, 'Voto ipotetico'), h('th', {}, 'Voto finale'));
     const body = studs.map((st) => {
       const val = valOf(vid, st.id) || {}, ass = !!val.assente;
@@ -860,14 +909,9 @@
         });
         return h('td', {}, inp);
       });
-      const fin = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '10', 'aria-label': 'Voto finale di ' + st.nome });
-      if (typeof val.final === 'number') fin.value = val.final;
-      fin.addEventListener('input', () => {
-        const raw = fin.value.replace(',', '.'), x = ensure(st.id);
-        if (raw === '') x.final = ''; else { const n = parseFloat(raw); if (isFinite(n) && n >= 0) x.final = Math.min(n, 10); }
-        x.updated = NOW(); save(); updateRow(st); renderStats();
-      });
-      return h('tr', {}, nm, pc, tot, hyp, h('td', {}, fin));
+      const fin = gradeSelect(val.final, (n) => { const x = ensure(st.id); x.final = n; x.updated = NOW(); save(); updateRow(st); renderStats(); }, 'Voto finale di ' + st.nome);
+      const tg = h('select', { 'aria-label': 'H o DSA di ' + st.nome, onchange: (e) => { st.tag = e.target.value; st.updated = NOW(); save(); route(); } }, ['', 'H', 'DSA'].map((o) => h('option', { value: o }, o || '—'))); tg.value = st.tag || '';
+      return h('tr', {}, nm, h('td', {}, tg), pc, tot, hyp, h('td', {}, fin));
     });
     const copy = () => {
       const lines = [['Classe', 'Verifica', 'Studente'].concat(parts.map((p) => p.name), ['Punti', 'Voto ipotetico', 'Voto finale']).join('\t')];
@@ -878,9 +922,10 @@
       }
       showText('Risultati della verifica', lines.join('\n'), 'Copia e incolla nel registro o in un foglio di calcolo.');
     };
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), h('h2', {}, '✏️ ' + ENT.verifiche.title(v)),
-      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
-      h('div', { class: 'bar' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('Copia risultati', copy, ''),
+    const obsUri = () => 'obsidian://new?vault=' + encodeURIComponent('VaultdiRic') + '&file=' + encodeURIComponent('wiki/scuola/' + obsName(v).replace(/\.md$/, '')) + '&overwrite=true&content=' + encodeURIComponent(buildMd(v));
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('h2', {}, '✏️ ' + ENT.verifiche.title(v)),
+      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + perOf(v) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
+      h('div', { class: 'bar' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('Copia risultati', copy, ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), ''),
         h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe')), statsBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }
     root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));

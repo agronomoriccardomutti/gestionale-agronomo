@@ -114,3 +114,9 @@ Il link contiene il tuo id utente (impossibile da indovinare) ma è leggibile da
 - **Importa Modello 22**: carica uno o più .xlsx, sceglie/crea il periodo e porta le aziende nel periodo (nuovi clienti creati in automatico). Le ispezioni nascono solo quando si spunta l'azienda.
 - **Pagina periodo**: spunta le aziende da ispezionare; per ognuna Organizzazione (Programmata/Svolta/Verbale da consegnare/Chiusa), Data, Pagamento, Km, Autostrada, Complessità e Importo. Sotto: 20% del Totale, EPAP 4% (se attivato), Da accantonare (= somma rimborso km). Scarica la Nota spese Excel con le ispezioni non più "Programmata".
 - **Scheda azienda**: dati, ispezioni collegate e Modello 44.
+
+## Scuola: più classi, periodi e Obsidian
+
+- **Classi**: pulsante «Crea classi 3°A … 5°B» (crea solo quelle che mancano, con ITAS Leardi / Genio Rurale). Le chip in cima passano da una classe all'altra.
+- **Verifiche**: campo Periodo (Trimestre/Pentamestre; se vuoto si deduce dalla data: da settembre a dicembre Trimestre). Nella pagina classe si filtra per periodo.
+- **Correzione**: H/DSA per studente, voto finale a menu (es. 6+, 6½, 6/7), «Scrivi su Obsidian» (vault VaultdiRic, cartella wiki/scuola) e «Nota .md».

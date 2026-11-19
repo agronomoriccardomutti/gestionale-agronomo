@@ -299,5 +299,32 @@
     return zipStore(files);
   }
 
-  return { quarterStart, TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+  /* Importa verifica: blocco di testo "Chiave: valore" (classe, verifica, data, periodo, voto, poi una riga per parte con i punti massimi) */
+  function parseVerifica(text) {
+    const out = { classe: '', titolo: '', data: '', periodo: '', vmin: 3, vmax: 9, parti: [], errori: [] };
+    const num1 = (x) => parseFloat(String(x).replace(',', '.'));
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const m = raw.match(/^\s*([^:]+?)\s*:\s*(.+?)\s*$/); if (!m) { if (raw.trim()) out.errori.push('Riga non valida: ' + raw.trim()); continue; }
+      const key = m[1].toLowerCase().replace(/[^a-zà-ú]/g, ''), val = m[2];
+      if (key === 'classe') out.classe = val;
+      else if (key === 'verifica' || key === 'titolo') out.titolo = val;
+      else if (key === 'data') {
+        const d = val.match(/^(\d{4})-(\d{2})-(\d{2})$/) ? val : (val.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/) ? val.replace(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/, (a, g, mm, y) => y + '-' + mm.padStart(2, '0') + '-' + g.padStart(2, '0')) : '');
+        if (d) out.data = d; else out.errori.push('Data non valida: ' + val);
+      } else if (key === 'periodo') out.periodo = /^p/i.test(val) ? 'Pentamestre' : /^t/i.test(val) ? 'Trimestre' : '';
+      else if (key === 'voto' || key === 'scala') {
+        const r = val.split(/\s*[-–—]\s*|\s+a\s+/); const a = num1(r[0]), b = num1(r[1]);
+        if (isFinite(a) && isFinite(b) && b > a) { out.vmin = a; out.vmax = b; } else out.errori.push('Voto non valido (serve es. 3-9): ' + val);
+      } else {
+        const mx = num1(val);
+        if (isFinite(mx) && mx > 0) out.parti.push({ id: 'p' + (out.parti.length + 1), name: m[1].trim(), max: mx }); else out.errori.push('Punti non validi per «' + m[1].trim() + '»: ' + val);
+      }
+    }
+    if (!out.classe) out.errori.push('Manca la riga «Classe:»');
+    if (!out.titolo) out.errori.push('Manca la riga «Verifica:»');
+    if (!out.parti.length) out.errori.push('Mancano le parti (es. «Vero o falso: 8»)');
+    return out;
+  }
+
+  return { parseVerifica, quarterStart, TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

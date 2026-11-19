@@ -120,3 +120,7 @@ Il link contiene il tuo id utente (impossibile da indovinare) ma è leggibile da
 - **Classi**: pulsante «Crea classi 3°A … 5°B» (crea solo quelle che mancano, con ITAS Leardi / Genio Rurale). Le chip in cima passano da una classe all'altra.
 - **Verifiche**: campo Periodo (Trimestre/Pentamestre; se vuoto si deduce dalla data: da settembre a dicembre Trimestre). Nella pagina classe si filtra per periodo.
 - **Correzione**: H/DSA per studente, voto finale a menu (es. 6+, 6½, 6/7), «Scrivi su Obsidian» (vault VaultdiRic, cartella wiki/scuola) e «Nota .md».
+
+## Importa verifica
+
+In Scuola → Verifiche (o nella pagina di una classe) il pulsante «📥 Importa verifica» crea una verifica da un blocco di testo: righe `Classe:`, `Verifica:`, `Data:` (AAAA-MM-GG o GG/MM/AAAA), `Periodo:` (Trimestre/Pentamestre), `Voto: 3-9` e una riga per ogni parte con i punti massimi (es. `Vero o falso: 8`).

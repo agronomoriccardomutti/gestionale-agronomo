@@ -669,7 +669,7 @@
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
     const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
-      ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : null;
+      ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
@@ -816,6 +816,26 @@
       '- Alunni presenti: ' + pres + ' su ' + n + '; verifiche con voto: ' + votes.length + '.', '', '## Registro', '', head, sep, ...lines, '', '## Articoli correlati', '', '- [[indice_wiki]]', ''].join('\n');
   }
   const obsName = (v) => 'verifica-' + ((byId('classi', v.classe) || {}).materia || 'genio-rurale').toLowerCase().replace(/\s+/g, '-') + '-' + (v.titolo || 'verifica').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + String((byId('classi', v.classe) || {}).nome || '').replace('°', '').toLowerCase() + '.md';
+  function openImportVerifica(presetClasse) {
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const ta = h('textarea', { placeholder: 'Classe: 4°A\nVerifica: V03T\nData: 2026-12-10\nPeriodo: Trimestre\nVoto: 3-9\nVero o falso: 8\nDomanda 2: 8\nDomanda 3: 10', style: 'min-height:200px;font-family:monospace' });
+    const status = h('p', { class: 'note' }, 'Incolla il blocco che ti ha preparato Claude.');
+    const close = () => dlg.close();
+    const fail = (m) => { status.textContent = m; status.style.color = 'var(--warn, #c0392b)'; };
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📥 Importa verifica'), ta, status,
+      h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: close }, 'Annulla'),
+        h('button', { type: 'button', class: 'pri', onclick: () => {
+          const p = L.parseVerifica(ta.value); status.style.color = '';
+          if (p.errori.length) return fail(p.errori.join(' · '));
+          const cl = rows('classi').find((c) => normCl(c.nome) === normCl(p.classe));
+          if (!cl) return fail('Classe «' + p.classe + '» non trovata. Crea prima le classi (Scuola → Classi).');
+          if (rows('verifiche').some((v) => v.classe === cl.id && (v.titolo || '').toLowerCase() === p.titolo.toLowerCase())) return fail('Esiste già la verifica «' + p.titolo + '» per la ' + cl.nome + '.');
+          const v = { id: uid(), classe: cl.id, titolo: p.titolo, data: p.data || L.today(), parti: p.parti, vmin: p.vmin, vmax: p.vmax, updated: NOW() };
+          if (p.periodo) v.periodo = p.periodo;
+          rows('verifiche').push(v); save(); close(); location.hash = '#/scuola/correggi/' + v.id; route(); toast('Verifica creata: ' + p.titolo + ' (' + cl.nome + ')');
+        } }, 'Crea verifica'))));
+    dlg.showModal();
+  }
   const votoCls = (x) => (x === null ? 'na' : x >= 6 ? 'ok' : 'ko');
   const votoEl = (x) => h('span', { class: 'voto ' + votoCls(x) }, x === null ? '—' : fmt1(x));
 
@@ -836,7 +856,7 @@
         }
         if (!n) return toast('Nessun nuovo nome da aggiungere');
         save(); route(); toast(n + ' studenti aggiunti');
-      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined }), '')));
+      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined }), ''), btn('📥 Importa verifica', () => openImportVerifica(), '')));
     const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + ENT.classi.title(c)), perChips, addBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Nessuno studente. Incolla l\'elenco qui sopra.')); return root; }
     const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'),

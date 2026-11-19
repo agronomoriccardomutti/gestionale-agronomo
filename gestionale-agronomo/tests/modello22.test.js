@@ -57,3 +57,10 @@ test('intestazione con mesi ("Ottobre - Dicembre") invece di 4\'-26', async () =
   assert.strictEqual(m.quarter.n, 4); assert.strictEqual(m.trimestre, '4° trim. 2026');
   assert.strictEqual(L.quarterEnd(m.quarter), '2026-12-31');
 });
+
+test('parseVerifica: blocco di testo', () => {
+  const p = L.parseVerifica('Classe: 4°A\nVerifica: V03T\nData: 10/12/2026\nPeriodo: Trimestre\nVoto: 3-9\nVero o falso: 8\nDomanda 2: 8,5\nDomanda 3: 10');
+  assert.deepStrictEqual(p.errori, []); assert.strictEqual(p.data, '2026-12-10'); assert.strictEqual(p.periodo, 'Trimestre');
+  assert.deepStrictEqual(p.parti.map((x) => [x.name, x.max]), [['Vero o falso', 8], ['Domanda 2', 8.5], ['Domanda 3', 10]]);
+  assert.ok(L.parseVerifica('Verifica: x').errori.length >= 2);
+});

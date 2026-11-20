@@ -871,7 +871,7 @@
         if (!n) return toast('Nessun nuovo nome da aggiungere');
         save(); route(); toast(n + ' studenti aggiunti');
       }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined, materia: ui.mat || (mats.length === 1 ? mats[0] : undefined) }), ''), btn('📥 Importa verifica', () => openImportVerifica(), '')));
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + ENT.classi.title(c)), matChips, perChips, addBox);
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + c.nome + ' · ' + (ui.mat || mats.join(' + ')), c.scuola && h('small', { class: 'note' }, ' – ' + c.scuola)), matChips, perChips, addBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Nessuno studente. Incolla l\'elenco qui sopra.')); return root; }
     const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'),
       vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data) + ' · ' + (perOf(v) === 'Trimestre' ? 'T' : 'P') + (mats.length > 1 ? ' · ' + (matOf(v) === 'Industrie agrarie' ? 'IND' : 'GR') : '')))), h('th', {}, 'Media'), h('th', {}));

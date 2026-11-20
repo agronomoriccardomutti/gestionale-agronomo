@@ -124,3 +124,7 @@ Il link contiene il tuo id utente (impossibile da indovinare) ma è leggibile da
 ## Importa verifica
 
 In Scuola → Verifiche (o nella pagina di una classe) il pulsante «📥 Importa verifica» crea una verifica da un blocco di testo: righe `Classe:`, `Verifica:`, `Data:` (AAAA-MM-GG o GG/MM/AAAA), `Periodo:` (Trimestre/Pentamestre), `Voto: 3-9` e una riga per ogni parte con i punti massimi (es. `Vero o falso: 8`).
+
+## Più materie per classe
+
+Le classi 3°A e 3°B hanno Genio Rurale e Industrie agrarie. Ogni verifica ha il campo **Materia** (nel blocco di importazione: riga `Materia: Industrie` o `Materia: Genio Rurale`). Nella pagina classe le chip «Tutte le materie / Genio Rurale / Industrie agrarie» filtrano verifiche e medie; il nome della verifica mostra la materia.

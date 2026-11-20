@@ -301,7 +301,7 @@
 
   /* Importa verifica: blocco di testo "Chiave: valore" (classe, verifica, data, periodo, voto, poi una riga per parte con i punti massimi) */
   function parseVerifica(text) {
-    const out = { classe: '', titolo: '', data: '', periodo: '', vmin: 3, vmax: 9, parti: [], errori: [] };
+    const out = { classe: '', titolo: '', data: '', periodo: '', materia: '', vmin: 3, vmax: 9, parti: [], errori: [] };
     const num1 = (x) => parseFloat(String(x).replace(',', '.'));
     for (const raw of String(text || '').split(/\r?\n/)) {
       const m = raw.match(/^\s*([^:]+?)\s*:\s*(.+?)\s*$/); if (!m) { if (raw.trim()) out.errori.push('Riga non valida: ' + raw.trim()); continue; }
@@ -311,7 +311,8 @@
       else if (key === 'data') {
         const d = val.match(/^(\d{4})-(\d{2})-(\d{2})$/) ? val : (val.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/) ? val.replace(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/, (a, g, mm, y) => y + '-' + mm.padStart(2, '0') + '-' + g.padStart(2, '0')) : '');
         if (d) out.data = d; else out.errori.push('Data non valida: ' + val);
-      } else if (key === 'periodo') out.periodo = /^p/i.test(val) ? 'Pentamestre' : /^t/i.test(val) ? 'Trimestre' : '';
+      } else if (key === 'materia') out.materia = /^i/i.test(val) ? 'Industrie agrarie' : /^g/i.test(val) ? 'Genio Rurale' : '';
+      else if (key === 'periodo') out.periodo = /^p/i.test(val) ? 'Pentamestre' : /^t/i.test(val) ? 'Trimestre' : '';
       else if (key === 'voto' || key === 'scala') {
         const r = val.split(/\s*[-–—]\s*|\s+a\s+/); const a = num1(r[0]), b = num1(r[1]);
         if (isFinite(a) && isFinite(b) && b > a) { out.vmin = a; out.vmax = b; } else out.errori.push('Voto non valido (serve es. 3-9): ' + val);

@@ -261,7 +261,7 @@
       fields: [
         { k: 'nome', l: 'Classe', t: 'text', req: 1 },
         { k: 'scuola', l: 'Scuola', t: 'text' },
-        { k: 'materia', l: 'Materia / indirizzo', t: 'text' },
+        { k: 'materia', l: 'Materie (separate da virgola)', t: 'text', list: ['Genio Rurale', 'Industrie agrarie', 'Genio Rurale, Industrie agrarie'] },
         { k: 'ore', l: 'Ore settimanali', t: 'number', step: '1' },
         { k: 'coordinatore', l: 'Sono il coordinatore', t: 'checkbox' },
         { k: 'note', l: 'Note', t: 'textarea' }],
@@ -290,13 +290,14 @@
         { k: 'classe', l: 'Classe', t: 'ref', to: 'classi', req: 1 },
         { k: 'titolo', l: 'Verifica (es. V01T)', t: 'text', req: 1 },
         { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'materia', l: 'Materia', t: 'select', opts: ['Genio Rurale', 'Industrie agrarie'] },
         { k: 'periodo', l: 'Periodo', t: 'select', opts: ['Trimestre', 'Pentamestre'] },
         { k: 'parti', l: 'Parti e punti massimi', t: 'parts' },
         { k: 'vmin', l: 'Voto minimo (con 0 punti)', t: 'number', step: '0.5', def: 3 },
         { k: 'vmax', l: 'Voto massimo (con tutti i punti)', t: 'number', step: '0.5', def: 9 },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => (r.titolo || 'Verifica') + (r.classe ? ' – ' + lab('classi', r.classe) : ''),
-      cols: ['data', 'periodo'],
+      title: (r) => (r.titolo || 'Verifica') + (r.classe ? ' – ' + lab('classi', r.classe) : '') + ' · ' + matShort(matOf(r)),
+      cols: ['data', 'materia', 'periodo'],
       extra: (r) => ['Totale ' + L.num(maxTot(r)) + ' punti · voto ' + fmt1(rng(r).min) + '–' + fmt1(rng(r).max)],
       actions: [{ label: '✏️ Correggi', show: () => true, go: (r) => '#/scuola/correggi/' + r.id }],
       onDelete: (r) => dropWhere('valutazioni', (x) => x.verifica === r.id),
@@ -352,6 +353,7 @@
     o.version = 1;
     o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, calFeed: false, partenza: 'San Salvatore Monferrato' }, o.settings);
     o.data = o.data && typeof o.data === 'object' ? o.data : {};
+    for (const c of (o.data.classi || [])) if (/^3[AB]$/.test(String(c.nome || '').toUpperCase().replace(/[^0-9A-Z]/g, '')) && /^\s*genio rurale\s*$/i.test(c.materia || '')) { c.materia = 'Genio Rurale, Industrie agrarie'; c.updated = new Date().toISOString(); }
     o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', feedHash: '', feedAt: '', deleted: [] }, o.meta);
     if (!Array.isArray(o.meta.deleted)) o.meta.deleted = [];
     const now = new Date().toISOString();
@@ -601,7 +603,7 @@
   }
 
   /* ---------- Viste ---------- */
-  const ui = { q: '', showDone: false, per: '' };
+  const ui = { q: '', showDone: false, per: '', mat: '' };
   const tile = (l, v, bad) => h('div', { class: 'tile' + (bad ? ' bad' : '') }, h('b', {}, v), h('span', {}, l));
   const tiles = (arr) => h('div', { class: 'tiles' }, arr.map(([l, v, b]) => tile(l, v, b)));
 
@@ -772,12 +774,20 @@
     const fin = val && typeof val.final === 'number' ? val.final : null;
     return { any, tot, hyp, fin, eff: fin !== null ? fin : hyp };
   }
+  const MATERIE = ['Genio Rurale', 'Industrie agrarie'];
+  const matShort = (m) => (m === 'Industrie agrarie' ? 'Industrie' : 'Genio Rurale');
+  const matOf = (v) => {
+    if (v.materia) return v.materia;
+    const cm = String((byId('classi', v.classe) || {}).materia || '').toLowerCase();
+    return cm.includes('industri') && !cm.includes('genio') ? 'Industrie agrarie' : 'Genio Rurale';
+  };
+  const matsOfClass = (c) => { const t = String(c.materia || '').toLowerCase(); const m = MATERIE.filter((x) => t.includes(x.split(' ')[0].toLowerCase())); return m.length ? m : ['Genio Rurale']; };
   const perOf = (v) => v.periodo || (v.data && +v.data.slice(5, 7) >= 9 ? 'Trimestre' : v.data ? 'Pentamestre' : 'Trimestre');
   const CLASSI_STD = ['3°A', '3°B', '4°A', '4°B', '5°A', '5°B'];
   const normCl = (n) => String(n || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
   function creaClassi() {
     const have = new Set(rows('classi').map((c) => normCl(c.nome))); let n = 0;
-    for (const nome of CLASSI_STD) if (!have.has(normCl(nome))) { rows('classi').push({ id: uid(), nome, scuola: 'ITAS Leardi', materia: 'Genio Rurale', updated: NOW() }); n++; }
+    for (const nome of CLASSI_STD) if (!have.has(normCl(nome))) { rows('classi').push({ id: uid(), nome, scuola: 'ITAS Leardi', materia: nome[0] === '3' ? 'Genio Rurale, Industrie agrarie' : 'Genio Rurale', updated: NOW() }); n++; }
     save(); route(); toast(n ? n + ' classi create' : 'Le classi ci sono già tutte');
   }
   const classChips = (cur, hrefOf) => h('div', { class: 'chips' }, rows('classi').slice().sort((a, b) => a.nome.localeCompare(b.nome, 'it')).map((c) => h('a', { class: 'chip' + (c.id === cur ? ' on' : ''), href: hrefOf(c) }, c.nome)));
@@ -803,7 +813,7 @@
       lines.push('| [[' + st.nome + ']]' + (st.tag ? ' (' + st.tag + ')' : '') + ' | ' + (ass ? 'A' + (val.rec ? ' (rec. ' + L.fmtDate(val.rec) + ')' : '') : 'P') + ' | ' + parts.map((p) => (typeof sc[p.id] === 'number' ? fnum(sc[p.id]) : '')).join(' | ') + ' | ' + (cv.any ? fnum(cv.tot) : '') + ' | ' + (cv.hyp === null ? '' : fnum(cv.hyp)) + ' | ' + (cv.fin === null ? '' : fnum(cv.fin)) + ' |');
     }
     const avg = votes.length ? votes.reduce((a, x) => a + x, 0) / votes.length : null, suff = votes.filter((x) => x >= 6).length, n = studs.length;
-    const titolo = v.titolo || 'Verifica', mat = c.materia || 'Genio Rurale';
+    const titolo = v.titolo || 'Verifica', mat = matOf(v);
     const head = '| Alunno | Presenza | ' + parts.map((p) => p.name + ' /' + fnum(p.max)).join(' | ') + ' | Totale | Voto ipotetico | Voto finale |';
     const sep = '|---|:---:|' + new Array(parts.length + 4).join('---:|');
     return ['---', 'tags: [scuola, verifica, ' + mat.toLowerCase().replace(/\s+/g, '-') + ', ' + cl.toLowerCase() + ', ' + (per === 'Trimestre' ? 'T' : 'P') + ']', 'tipo: verifica',
@@ -815,7 +825,7 @@
       '## Punti chiave', '', '- ' + fnum(tot) + ' punti totali: ' + parts.map((p) => p.name + ' ' + fnum(p.max)).join(', ') + '.', '- Presenza: P presente, A assente (con data del recupero se inserita).',
       '- Alunni presenti: ' + pres + ' su ' + n + '; verifiche con voto: ' + votes.length + '.', '', '## Registro', '', head, sep, ...lines, '', '## Articoli correlati', '', '- [[indice_wiki]]', ''].join('\n');
   }
-  const obsName = (v) => 'verifica-' + ((byId('classi', v.classe) || {}).materia || 'genio-rurale').toLowerCase().replace(/\s+/g, '-') + '-' + (v.titolo || 'verifica').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + String((byId('classi', v.classe) || {}).nome || '').replace('°', '').toLowerCase() + '.md';
+  const obsName = (v) => 'verifica-' + matOf(v).toLowerCase().replace(/\s+/g, '-') + '-' + (v.titolo || 'verifica').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + String((byId('classi', v.classe) || {}).nome || '').replace('°', '').toLowerCase() + '.md';
   function openImportVerifica(presetClasse) {
     const dlg = document.getElementById('dlg'); dlg.replaceChildren();
     const ta = h('textarea', { placeholder: 'Classe: 4°A\nVerifica: V03T\nData: 2026-12-10\nPeriodo: Trimestre\nVoto: 3-9\nVero o falso: 8\nDomanda 2: 8\nDomanda 3: 10', style: 'min-height:200px;font-family:monospace' });
@@ -829,9 +839,10 @@
           if (p.errori.length) return fail(p.errori.join(' · '));
           const cl = rows('classi').find((c) => normCl(c.nome) === normCl(p.classe));
           if (!cl) return fail('Classe «' + p.classe + '» non trovata. Crea prima le classi (Scuola → Classi).');
-          if (rows('verifiche').some((v) => v.classe === cl.id && (v.titolo || '').toLowerCase() === p.titolo.toLowerCase())) return fail('Esiste già la verifica «' + p.titolo + '» per la ' + cl.nome + '.');
+          if (rows('verifiche').some((v) => v.classe === cl.id && (v.titolo || '').toLowerCase() === p.titolo.toLowerCase() && matOf(v) === matOf({ classe: cl.id, materia: p.materia }))) return fail('Esiste già la verifica «' + p.titolo + '» per la ' + cl.nome + ' (' + matShort(matOf({ classe: cl.id, materia: p.materia })) + ').');
           const v = { id: uid(), classe: cl.id, titolo: p.titolo, data: p.data || L.today(), parti: p.parti, vmin: p.vmin, vmax: p.vmax, updated: NOW() };
           if (p.periodo) v.periodo = p.periodo;
+          if (p.materia) v.materia = p.materia;
           rows('verifiche').push(v); save(); close(); location.hash = '#/scuola/correggi/' + v.id; route(); toast('Verifica creata: ' + p.titolo + ' (' + cl.nome + ')');
         } }, 'Crea verifica'))));
     dlg.showModal();
@@ -844,7 +855,10 @@
     if (!c) return h('div', { class: 'empty' }, 'Classe non trovata.');
     const studs = studentsOf(id);
     const allVers = rows('verifiche').filter((v) => v.classe === id).sort((a, b) => (a.data || '').localeCompare(b.data || ''));
-    const vers = ui.per ? allVers.filter((v) => perOf(v) === ui.per) : allVers;
+    const mats = matsOfClass(c);
+    if (ui.mat && !mats.includes(ui.mat)) ui.mat = '';
+    const vers = allVers.filter((v) => (!ui.per || perOf(v) === ui.per) && (!ui.mat || matOf(v) === ui.mat));
+    const matChips = mats.length > 1 ? h('div', { class: 'chips' }, [['', 'Tutte le materie'], ...mats.map((m) => [m, m])].map(([k, l]) => h('a', { class: 'chip' + (ui.mat === k ? ' on' : ''), href: '#/scuola/classe/' + id, onclick: (e) => { e.preventDefault(); ui.mat = k; route(); } }, l))) : null;
     const perChips = h('div', { class: 'chips' }, [['', 'Tutto l\'anno'], ['Trimestre', 'Trimestre'], ['Pentamestre', 'Pentamestre']].map(([k, l]) => h('a', { class: 'chip' + (ui.per === k ? ' on' : ''), href: '#/scuola/classe/' + id, onclick: (e) => { e.preventDefault(); ui.per = k; route(); } }, l)));
     const ta = h('textarea', { id: 'paste', placeholder: 'Rossi Marco\nBianchi Giulia\n…' });
     const addBox = h('div', { class: 'box' }, h('label', { for: 'paste' }, 'Aggiungi studenti: uno per riga (puoi incollare l\'elenco dal registro)'), ta,
@@ -856,11 +870,11 @@
         }
         if (!n) return toast('Nessun nuovo nome da aggiungere');
         save(); route(); toast(n + ' studenti aggiunti');
-      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined }), ''), btn('📥 Importa verifica', () => openImportVerifica(), '')));
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + ENT.classi.title(c)), perChips, addBox);
+      }, 'pri'), btn('+ Verifica per questa classe', () => openForm('verifiche', null, { classe: id, periodo: ui.per || undefined, materia: ui.mat || (mats.length === 1 ? mats[0] : undefined) }), ''), btn('📥 Importa verifica', () => openImportVerifica(), '')));
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/classi' }, '← Classi')), classChips(id, (x) => '#/scuola/classe/' + x.id), h('h2', {}, '👥 ' + ENT.classi.title(c)), matChips, perChips, addBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Nessuno studente. Incolla l\'elenco qui sopra.')); return root; }
     const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'),
-      vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data) + ' · ' + (perOf(v) === 'Trimestre' ? 'T' : 'P')))), h('th', {}, 'Media'), h('th', {}));
+      vers.map((v) => h('th', {}, h('a', { href: '#/scuola/correggi/' + v.id }, v.titolo || 'Verifica'), h('div', { class: 'note' }, L.fmtDate(v.data) + ' · ' + (perOf(v) === 'Trimestre' ? 'T' : 'P') + (mats.length > 1 ? ' · ' + (matOf(v) === 'Industrie agrarie' ? 'IND' : 'GR') : '')))), h('th', {}, 'Media'), h('th', {}));
     const body = studs.map((st) => {
       let sum = 0, n = 0;
       const cells = vers.map((v) => {
@@ -944,7 +958,7 @@
     };
     const obsUri = () => 'obsidian://new?vault=' + encodeURIComponent('VaultdiRic') + '&file=' + encodeURIComponent('wiki/scuola/' + obsName(v).replace(/\.md$/, '')) + '&overwrite=true&content=' + encodeURIComponent(buildMd(v));
     const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('h2', {}, '✏️ ' + ENT.verifiche.title(v)),
-      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + perOf(v) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
+      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + matOf(v) + ' · ' + perOf(v) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
       h('div', { class: 'bar' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('Copia risultati', copy, ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), ''),
         h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe')), statsBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }

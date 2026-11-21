@@ -847,7 +847,7 @@
         } }, 'Crea verifica'))));
     dlg.showModal();
   }
-  const votoCls = (x) => (x === null ? 'na' : x >= 6 ? 'ok' : 'ko');
+  const votoCls = (x) => (x === null ? 'na' : x >= 8 ? 'top' : x >= 6 ? 'ok' : x >= 5 ? 'mid' : 'ko');
   const votoEl = (x) => h('span', { class: 'voto ' + votoCls(x) }, x === null ? '—' : fmt1(x));
 
   function viewClasse(id) {
@@ -909,25 +909,27 @@
     const renderStats = () => {
       const all = studs.map((x) => calcVal(v, valOf(vid, x.id))), done = all.filter((x) => x.eff !== null);
       const avg = done.length ? done.reduce((a, x) => a + x.eff, 0) / done.length : null;
-      const bk = [['< 5', 0, 5], ['5–5,9', 5, 6], ['6–6,9', 6, 7], ['7–7,9', 7, 8], ['8–10', 8, 11]];
-      const ko = done.filter((x) => x.eff < 6).length;
+      const bk = [['< 5', 0, 5, 'ko'], ['5–5,9', 5, 6, 'mid'], ['6–6,9', 6, 7, 'ok'], ['7–7,9', 7, 8, 'ok2'], ['8–10', 8, 11, 'top']];
+      const ko = done.filter((x) => x.eff < 6).length, cnt = bk.map((x) => done.filter((y) => y.eff >= x[1] && y.eff < x[2]).length);
       statsBox.replaceChildren(
         tiles([['Corrette', done.length + ' / ' + studs.length], ['Media', avg === null ? '—' : fmt1(avg)], ['Insufficienti', ko, ko > 0], ['Voti finali', all.filter((x) => x.fin !== null).length + ' / ' + studs.length]]),
-        h('p', { class: 'note' }, 'Distribuzione: ' + bk.map((b) => b[0] + ': ' + done.filter((x) => x.eff >= b[1] && x.eff < b[2]).length).join(' · ')));
+        done.length ? h('div', { class: 'dist' }, h('div', { class: 'dbar' }, bk.map((x, i) => cnt[i] ? h('i', { class: 'd-' + x[3], style: 'flex:' + cnt[i], title: x[0] + ': ' + cnt[i] }, cnt[i]) : null)),
+          h('div', { class: 'dleg' }, bk.map((x, i) => h('span', {}, h('b', { class: 'd-' + x[3] }), x[0] + ' · ' + cnt[i])))) : null);
     };
     const updateRow = (st) => {
       const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
-      t.tot.textContent = cv.any ? fmt1(cv.tot) : ''; t.hyp.replaceChildren(votoEl(cv.hyp));
+      t.tot.replaceChildren(cv.any ? h('div', { class: 'ptot' }, h('b', {}, fmt1(cv.tot)), h('span', { class: 'pbar' }, h('i', { style: 'width:' + Math.min(100, Math.round(cv.tot / (m || 1) * 100)) + '%' }))) : ''); t.hyp.replaceChildren(votoEl(cv.hyp));
     };
-    const head = h('tr', {}, h('th', {}, 'Studente'), h('th', {}, 'H / DSA'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
-      h('th', {}, 'Punti', h('div', { class: 'note' }, '/ ' + L.num(m))), h('th', {}, 'Voto ipotetico'), h('th', {}, 'Voto finale'));
+    const head = h('tr', {}, h('th', {}, 'Studente'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
+      h('th', {}, 'Punti', h('div', { class: 'note' }, '/ ' + L.num(m))), h('th', {}, 'Voto'), h('th', {}, 'Voto finale'));
     const body = studs.map((st) => {
       const val = valOf(vid, st.id) || {}, ass = !!val.assente;
-      const tot = h('td', { class: 'tot' }), hyp = h('td'); refs.set(st.id, { tot, hyp });
+      const tot = h('td', { class: 'tot' }), hyp = h('td', { class: 'hyp' }); refs.set(st.id, { tot, hyp });
       const rec = h('input', { type: 'date', class: 'rec', 'aria-label': 'Data recupero di ' + st.nome, value: val.rec || '',
         onchange: (e) => { const x = ensure(st.id); x.rec = e.target.value; x.updated = NOW(); save(); } });
-      const nm = h('td', { class: 'nm' }, st.nome + (st.tag ? ' (' + st.tag + ')' : ''),
-        h('div', {}, btn(ass ? 'Assente' : 'Presente', () => { const x = ensure(st.id); x.assente = !x.assente; x.updated = NOW(); save(); route(); }), ass && rec));
+      const tagBtn = h('button', { type: 'button', class: 'tagc' + (st.tag ? ' on' : ''), title: 'Tocca per cambiare: nessuno → H → DSA', onclick: () => { st.tag = st.tag === 'H' ? 'DSA' : st.tag === 'DSA' ? '' : 'H'; st.updated = NOW(); save(); route(); } }, st.tag || '+ H/DSA');
+      const presBtn = h('button', { type: 'button', class: 'pres' + (ass ? ' abs' : ''), onclick: () => { const x = ensure(st.id); x.assente = !x.assente; x.updated = NOW(); save(); route(); } }, ass ? 'Assente' : 'Presente');
+      const nm = h('td', { class: 'nm' }, h('div', { class: 'nmn' }, st.nome), h('div', { class: 'nmc' }, presBtn, tagBtn, ass && rec));
       const pc = parts.map((p) => {
         const inp = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.25', min: '0', max: String(p.max), 'aria-label': p.name + ' di ' + st.nome });
         if (val.scores && typeof val.scores[p.id] === 'number') inp.value = val.scores[p.id];
@@ -941,11 +943,11 @@
           const x = valOf(vid, st.id);
           if (x && x.scores[p.id] > p.max) { x.scores[p.id] = +p.max; inp.value = p.max; inp.classList.remove('over'); x.updated = NOW(); save(); updateRow(st); renderStats(); }
         });
-        return h('td', {}, inp);
+        return h('td', { 'data-l': p.name + ' (max ' + L.num(p.max) + ')' }, inp);
       });
       const fin = gradeSelect(val.final, (n) => { const x = ensure(st.id); x.final = n; x.updated = NOW(); save(); updateRow(st); renderStats(); }, 'Voto finale di ' + st.nome);
-      const tg = h('select', { 'aria-label': 'H o DSA di ' + st.nome, onchange: (e) => { st.tag = e.target.value; st.updated = NOW(); save(); route(); } }, ['', 'H', 'DSA'].map((o) => h('option', { value: o }, o || '—'))); tg.value = st.tag || '';
-      return h('tr', {}, nm, h('td', {}, tg), pc, tot, hyp, h('td', {}, fin));
+      tot.dataset.l = 'Punti / ' + L.num(m); hyp.dataset.l = 'Voto';
+      return h('tr', { class: ass ? 'abs' : '' }, nm, pc, tot, hyp, h('td', { 'data-l': 'Voto finale' }, fin));
     });
     const copy = () => {
       const lines = [['Classe', 'Verifica', 'Studente'].concat(parts.map((p) => p.name), ['Punti', 'Voto ipotetico', 'Voto finale']).join('\t')];
@@ -957,12 +959,13 @@
       showText('Risultati della verifica', lines.join('\n'), 'Copia e incolla nel registro o in un foglio di calcolo.');
     };
     const obsUri = () => 'obsidian://new?vault=' + encodeURIComponent('VaultdiRic') + '&file=' + encodeURIComponent('wiki/scuola/' + obsName(v).replace(/\.md$/, '')) + '&overwrite=true&content=' + encodeURIComponent(buildMd(v));
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('h2', {}, '✏️ ' + ENT.verifiche.title(v)),
-      h('p', { class: 'note' }, L.fmtDate(v.data) + ' · ' + matOf(v) + ' · ' + perOf(v) + ' · ' + L.num(m) + ' punti · voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.'),
-      h('div', { class: 'bar' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('Copia risultati', copy, ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), ''),
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('div', { class: 'vhead' }, h('h2', {}, v.titolo || 'Verifica'), h('div', { class: 'vtags' },
+        h('span', { class: 'vt cl' }, (byId('classi', v.classe) || {}).nome || ''), h('span', { class: 'vt' }, matOf(v)), h('span', { class: 'vt' }, perOf(v)), h('span', { class: 'vt' }, '📅 ' + L.fmtDate(v.data)), h('span', { class: 'vt' }, L.num(m) + ' punti')),
+        h('p', { class: 'note' }, 'Voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.')),
+      h('div', { class: 'bar' }, btn('Copia risultati', copy, 'pri'), btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), ''),
         h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe')), statsBox);
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }
-    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));
+    root.append(h('div', { class: 'scroll cor-w' }, h('table', { class: 'g cor' }, h('thead', {}, head), h('tbody', {}, body))));
     studs.forEach(updateRow); renderStats();
     return root;
   }
@@ -1335,7 +1338,7 @@
   }
   // tabelle adattive: a tutta larghezza; su schermi stretti ogni riga diventa una scheda con le etichette delle colonne
   function fitTables(root) {
-    for (const t of root.querySelectorAll('table.g:not(.tp)')) {
+    for (const t of root.querySelectorAll('table.g:not(.tp):not(.cor)')) {
       const hr = t.querySelector('thead tr:last-child'); if (!hr) continue;
       const labs = [...hr.children].map((x) => x.textContent.trim()); t.classList.add('rs');
       for (const tr of t.querySelectorAll('tbody tr')) [...tr.children].forEach((td, k) => { if (labs[k] && !td.dataset.l) td.dataset.l = labs[k]; });

@@ -128,3 +128,7 @@ In Scuola → Verifiche (o nella pagina di una classe) il pulsante «📥 Import
 ## Più materie per classe
 
 Le classi 3°A e 3°B hanno Genio Rurale e Industrie agrarie. Ogni verifica ha il campo **Materia** (nel blocco di importazione: riga `Materia: Industrie` o `Materia: Genio Rurale`). Nella pagina classe le chip «Tutte le materie / Genio Rurale / Industrie agrarie» filtrano verifiche e medie; il nome della verifica mostra la materia.
+
+## Scheda operatore: contatti e appunti
+
+Nella scheda azienda (Ispezioni → Aziende) ci sono Email, Telefono fisso e Cellulare (toccando si chiama o si scrive). Il pulsante «📞 Crea appunto da contattare» crea un promemoria con contatto e «ispezione prevista il gg/mm/aaaa» (la data si propone dalla prossima ispezione dell'azienda); gli appunti compaiono nella scheda e in Promemoria.

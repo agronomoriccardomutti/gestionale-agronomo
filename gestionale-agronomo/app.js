@@ -141,8 +141,8 @@
         { k: 'codice', l: 'Codice operatore', t: 'text' },
         { k: 'importo', l: 'Importo ispezione (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'email', l: 'Email', t: 'email' },
-        { k: 'fisso', l: 'Fisso', t: 'tel' },
-        { k: 'telefono', l: 'Telefono', t: 'tel' },
+        { k: 'fisso', l: 'Telefono fisso', t: 'tel' },
+        { k: 'telefono', l: 'Cellulare', t: 'tel' },
         { k: 'ubicazione', l: 'Ubicazione', t: 'text' },
         { k: 'comune', l: 'Comune', t: 'text' },
         { k: 'provincia', l: 'Provincia', t: 'text' },
@@ -150,7 +150,7 @@
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.ragione, cols: ['codice', 'comune', 'telefono'],
       detail: (r) => '#/ispezioni/azienda/' + r.id,
-      onDelete: (r) => { dropWhere('piano', (x) => x.azienda === r.id); dropWhere('modello44', (x) => x.azienda === r.id); },
+      onDelete: (r) => { dropWhere('piano', (x) => x.azienda === r.id); dropWhere('modello44', (x) => x.azienda === r.id); dropWhere('promemoria', (x) => x.azienda === r.id); },
     },
     modello44: {
       label: 'Modello 44', one: 'Modello 44', order: { k: 'numero', dir: 1 },
@@ -1103,19 +1103,47 @@
     return root;
   }
 
+  function openAppuntoContatto(a) {
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const oggi = L.today();
+    const prox = rows('ispezioni').filter((i) => i.azienda === a.id && i.data && i.data >= oggi).sort((x, y) => x.data.localeCompare(y.data))[0];
+    const contatto = [a.telefono && 'cell. ' + a.telefono, a.fisso && 'fisso ' + a.fisso, a.email].filter(Boolean).join(' · ');
+    const fld = (l, el) => h('div', { class: 'fld' }, h('label', {}, l), el);
+    const cont = h('input', { type: 'text', value: contatto, placeholder: 'telefono, email, referente…' });
+    const isp = h('input', { type: 'date', value: prox ? prox.data : '' });
+    const quando = h('input', { type: 'date', value: '' });
+    const note = h('textarea', { placeholder: 'Note (facoltative)', style: 'min-height:70px' });
+    const status = h('p', { class: 'note' }, '');
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📞 Appunto: da contattare'), h('p', { class: 'note' }, a.ragione),
+      fld('Contatto', cont), fld('Ispezione prevista il', isp), fld('Da contattare entro (facoltativo, crea il promemoria con data)', quando), fld('Note', note), status,
+      h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Annulla'),
+        h('button', { type: 'button', class: 'pri', onclick: () => {
+          const righe = ['DA CONTATTARE', 'Contatto: ' + (cont.value.trim() || '—'), 'Ispezione prevista il ' + (isp.value ? L.fmtDate(isp.value) : 'xx/xx/xxxx')];
+          if (note.value.trim()) righe.push(note.value.trim());
+          const rec = { id: uid(), titolo: 'Da contattare: ' + a.ragione + (isp.value ? ' – ispezione prevista ' + L.fmtDate(isp.value) : ''), area: 'Ispezioni', priorita: 'Normale', stato: 'Da fare', azienda: a.id, note: righe.join('\n'), updated: NOW() };
+          if (quando.value) rec.data = quando.value;
+          rows('promemoria').push(rec); save(); dlg.close(); route(); toast('Appunto creato');
+        } }, 'Crea appunto'))));
+    dlg.showModal();
+  }
+
   function viewAzienda(id) {
     const a = byId('aziende', id);
     if (!a) return h('div', { class: 'empty' }, 'Azienda non trovata.');
     const kv = (l, v) => h('div', {}, h('small', {}, l), v || h('span', { class: 'note' }, '—'));
     const link = (v, pre) => (v ? h('a', { href: pre + v }, v) : null);
     const isp = rows('ispezioni').filter((i) => i.azienda === id).sort((a1, b1) => (a1.data || '').localeCompare(b1.data || ''));
+    const appunti = rows('promemoria').filter((p) => p.azienda === id).sort((x, y) => (x.data || '9').localeCompare(y.data || '9'));
     const m44 = rows('modello44').filter((m) => m.azienda === id).sort((a1, b1) => String(a1.numero || '').localeCompare(String(b1.numero || ''), 'it', { numeric: true }));
     const tbl = (heads, trs) => h('div', { class: 'scroll' }, h('table', { class: 'g', style: 'min-width:0' }, h('thead', {}, h('tr', {}, heads.map((x) => h('th', {}, x)))), h('tbody', {}, trs)));
     return h('div', {}, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')), h('h2', {}, '🏢 ' + a.ragione),
       h('div', { class: 'bar' }, btn('✏️ Modifica azienda', () => openForm('aziende', a), 'pri')),
       h('div', { class: 'kv' }, kv('Operatore', a.ragione), kv('Codice operatore', a.codice), kv('Importo ispezione', a.importo !== undefined && a.importo !== '' ? L.eur(+a.importo) : ''),
-        kv('Email', link(a.email, 'mailto:')), kv('Fisso', link(a.fisso, 'tel:')), kv('Telefono', link(a.telefono, 'tel:')), kv('Ubicazione', a.ubicazione), kv('Comune', a.comune), kv('Provincia', a.provincia), kv('Tecnico', a.tecnico)),
+        kv('Email', link(a.email, 'mailto:')), kv('Telefono fisso', link(a.fisso, 'tel:')), kv('Cellulare', link(a.telefono, 'tel:')), kv('Ubicazione', a.ubicazione), kv('Comune', a.comune), kv('Provincia', a.provincia), kv('Tecnico', a.tecnico)),
       a.note && h('p', { class: 'note' }, a.note),
+      h('h3', {}, 'Appunti'),
+      appunti.length ? h('div', {}, appunti.map((p) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('promemoria', p) }, h('span', { class: 'date' }, p.data ? L.fmtDate(p.data) : '—'), h('span', {}, p.titolo, p.stato === 'Fatto' ? ' ✓' : ''), h('span', { class: 'tag' }, (p.note || '').split('\n')[1] || '')))) : h('p', { class: 'note' }, 'Nessun appunto.'),
+      h('div', { class: 'bar' }, btn('📞 Crea appunto «da contattare»', () => openAppuntoContatto(a), 'pri')),
       h('h3', {}, 'Ispezioni'),
       isp.length ? tbl(['Data ispezione', 'Data carico gestionale', 'Partenza', 'Destinazione 01', 'Organizzazione', 'Periodo'],
         isp.map((i) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('ispezioni', i) },

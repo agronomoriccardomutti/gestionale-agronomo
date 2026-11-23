@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -276,6 +276,46 @@
         dropWhere('studenti', (x) => x.classe === r.id); dropWhere('verifiche', (x) => x.classe === r.id);
       },
     },
+    docenti: {
+      label: 'Docenti', one: 'docente', order: { k: 'nome', dir: 1 },
+      fields: [
+        { k: 'nome', l: 'Cognome e nome (es. Mutti Riccardo)', t: 'text', req: 1 },
+        { k: 'titolo', l: 'Titolo', t: 'select', opts: ['Prof.', 'Prof.ssa'], req: 1 },
+        { k: 'sdA', l: 'Dipartimento Scienze Agrarie', t: 'checkbox' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => r.nome, cols: ['titolo', 'sdA'],
+      extra: (r) => { const n = rows('cattedre').filter((x) => x.docente === r.id).length; return n ? [n + (n === 1 ? ' cattedra' : ' cattedre')] : []; },
+      deleteWarn: 'Eliminare il docente e le sue cattedre?',
+      onDelete: (r) => dropWhere('cattedre', (x) => x.docente === r.id),
+    },
+    cattedre: {
+      label: 'Consigli di classe', one: 'cattedra', order: { k: 'materia', dir: 1 },
+      fields: [
+        { k: 'classe', l: 'Classe', t: 'ref', to: 'classi', req: 1 },
+        { k: 'materia', l: 'Materia', t: 'text', req: 1, listFn: () => rows('cattedre').map((x) => x.materia).filter(Boolean) },
+        { k: 'docente', l: 'Docente', t: 'ref', to: 'docenti', req: 1 }],
+      title: (r) => lab('classi', r.classe) + ' – ' + r.materia + (r.docente ? ' (' + lab('docenti', r.docente) + ')' : ''), cols: ['classe', 'materia', 'docente'],
+    },
+    verbali: {
+      label: 'Verbali', one: 'verbale', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Consiglio di classe', 'Dipartimento Scienze Agrarie'], req: 1 },
+        { k: 'classe', l: 'Classe (solo per il consiglio di classe)', t: 'ref', to: 'classi' },
+        { k: 'numero', l: 'Verbale n.', t: 'number', step: '1' },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'ora', l: 'Ora di inizio', t: 'time' },
+        { k: 'oraFine', l: 'Ora di chiusura', t: 'time' },
+        { k: 'luogo', l: 'Luogo', t: 'text', def: "nell'aula-informatica" },
+        { k: 'segretario', l: 'Segretario', t: 'ref', to: 'docenti' },
+        { k: 'coordinatore', l: 'Coordinatore', t: 'ref', to: 'docenti' },
+        { k: 'presidente', l: 'Presidente (Dirigente o delegato)', t: 'text' },
+        { k: 'intest1', l: 'Intestazione (riga 1)', t: 'text', def: 'ITAS "VINCENZO LUPARIA"' },
+        { k: 'intest2', l: 'Intestazione (riga 2)', t: 'text', def: 'Via Luparia, 14 - ROSIGNANO M.TO (AL) - FRAZ. SAN MARTINO' },
+        { k: 'istituto', l: 'Istituto (nel testo)', t: 'text', def: 'Istituto Superiore “V. LUPARIA”' },
+        { k: 'citta', l: 'Città', t: 'text', def: 'SAN MARTINO DI ROSIGNANO' }],
+      title: (r) => (r.tipo === 'Dipartimento Scienze Agrarie' ? 'Dipartimento Sc. Agrarie' : 'CdC ' + (lab('classi', r.classe) || '')) + ' – verbale n. ' + (r.numero || '?'),
+      cols: ['tipo', 'data'], detail: (r) => '#/scuola/verbale/' + r.id,
+    },
     studenti: {
       label: 'Studenti', one: 'studente', order: { k: 'nome', dir: 1 },
       fields: [
@@ -342,7 +382,7 @@
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
-    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche'] },
+    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
   ];
@@ -671,7 +711,8 @@
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
     const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
-      ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri')) : null;
+      ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
+        : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
@@ -892,6 +933,134 @@
         })));
     });
     root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' }, h('thead', {}, head), h('tbody', {}, body))));
+    return root;
+  }
+
+  /* ---------- Verbali ---------- */
+  const ODG_TPL = {
+    'CdC 1 – inizio anno': [['Insediamento componenti e nomina segretario'], ['Analisi della classe e segnalazione casi particolari già accertati o da verificare (H e BES)'], ['Piano di lavoro annuale secondo quanto definito dal documento di programmazione del dipartimento'], ['Avvio programmazione per curricolo digitale di istituto (rif. Dipartimenti disciplinari)'], ['Educazione civica: individuazione docenti (minimo tre) e tematiche da svolgere'], ['Attività di FSL (PCTO) per il triennio (ipotesi di programmazione)'], ['Progetto CLIL (Classi Quinte)'], ['Indicazioni sulle linee guida per l’orientamento e relative azioni (Classi Triennio)'], ['Indicazioni sulla meta delle visite di istruzione di un giorno (una per periodo didattico nel rispetto delle indicazioni della commissione gite)'], ['Comunicazioni del Dirigente Scolastico / Coordinatore di Classe']],
+    'CdC 2 – con genitori e alunni': [['Insediamento componenti'], ['Analisi e situazione della classe e andamento didattico disciplinare'], ['Piano didattico personalizzato, certificazioni BES e indicazione per inclusione (DPCM 04/11/2000 e nota M.I. del 05/11/2020)'], ['Linee programmatiche e progettuali e azioni per il curricolo di Istituto'], ['Programmazione attività dei percorsi di orientamento (linee guida orientamento DM 328/2022)'], ['FSL (PCTO): programmazione attività di indirizzo'], ['Conferma CLIL'], ['Comunicazioni varie'], ['Insediamento genitori e studenti', 1], ['Comunicazione ai rappresentanti di classe di genitori ed alunni dell’andamento disciplinare della classe, della programmazione didattica ed educativa in generale e dei criteri di valutazione', 1]],
+    'Dipartimento Scienze Agrarie': [['Insediamento componenti e nomina segretario'], ['Programmazione disciplinare e piano di lavoro annuale'], ['Criteri e griglie di valutazione, prove comuni'], ['Progetti, uscite didattiche e attività laboratoriali'], ['Comunicazioni varie']],
+  };
+  const surname = (d) => String(d.nome || '').trim().split(/\s+/)[0] || '';
+  const given = (d) => String(d.nome || '').trim().split(/\s+/).slice(1).join(' ');
+  const profFull = (d) => d ? (d.titolo || 'Prof.') + ' ' + L.nomeMaiusc((given(d) + ' ' + surname(d)).trim()) : '';
+  const profLow = (d) => { const t = (d.titolo || 'Prof.'); const n = (given(d) + ' ' + surname(d)).trim().replace(/\S+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase()); return t + ' ' + n; };
+  function verbCouncil(v) {
+    if (v.tipo === 'Dipartimento Scienze Agrarie') {
+      return rows('docenti').filter((d) => d.sdA).sort((a, b) => a.nome.localeCompare(b.nome, 'it')).map((d) => ({ d, mats: [...new Set(rows('cattedre').filter((x) => x.docente === d.id).map((x) => x.materia))] }));
+    }
+    const map = new Map();
+    for (const c of rows('cattedre').filter((x) => x.classe === v.classe)) { const d = byId('docenti', c.docente); if (!d) continue; if (!map.has(d.id)) map.set(d.id, { d, mats: [] }); map.get(d.id).mats.push(c.materia); }
+    return [...map.values()].sort((a, b) => a.d.nome.localeCompare(b.d.nome, 'it'));
+  }
+  function verbData(v) {
+    const dip = v.tipo === 'Dipartimento Scienze Agrarie', cl = byId('classi', v.classe), dt = L.dataEstesa(v.data);
+    const iso = v.data || '', y = +iso.slice(0, 4), mo = +iso.slice(5, 7);
+    const anno = y ? (mo >= 9 ? y + '/' + (y + 1) : (y - 1) + '/' + y) : '____/____';
+    const council = verbCouncil(v), ass = new Set(v.assenti || []);
+    const absent = council.filter((x) => ass.has(x.d.id)).map((x) => profLow(x.d).replace(/^Prof\.ssa /, 'prof.ssa ').replace(/^Prof\. /, 'prof. '));
+    const auto = !absent.length ? 'Sono tutti presenti.' : absent.length === 1 ? (/^prof\.ssa/.test(absent[0]) ? 'Risulta assente giustificata la ' : 'Risulta assente giustificato il ') + absent[0] + '.' : 'Risultano assenti giustificati i proff. ' + L.lstNomi(absent.map((s) => s.replace(/^prof\.(ssa)? /, ''))) + '.';
+    const odg = (v.odg || []);
+    const solo = odg.map((p, i) => [p, i]).filter(([p]) => !p.completo), comp = odg.map((p, i) => [p, i]).filter(([p]) => p.completo);
+    const odgLines = []; const num = (i) => (i + 1) + ') ' + (odg[i].titolo || '') + ';';
+    if (comp.length && solo.length) { odgLines.push({ t: 'Solo docenti:', h: 1 }); solo.forEach(([, i]) => odgLines.push({ t: num(i) })); odgLines.push({ t: dip ? 'Dipartimento allargato:' : 'Consiglio di classe completo (rappresentanti genitori ed alunni):', h: 1 }); comp.forEach(([, i]) => odgLines.push({ t: num(i) })); }
+    else odg.forEach((p, i) => odgLines.push({ t: num(i) }));
+    const corpo = []; let ammesso = false;
+    odg.forEach((p, i) => {
+      if (p.completo && !ammesso && solo.length) { corpo.push({ t: 'Vengono ora ammessi i rappresentanti degli studenti e dei genitori (Consiglio di classe completo)', h: 1 }); ammesso = true; }
+      corpo.push({ t: (i + 1) + ') ' + (p.titolo || ''), testo: (p.testo && p.testo.trim()) || (i === 0 ? auto : '') });
+    });
+    const fine = L.oraIt(v.oraFine) || '__.__', sig = (d) => (d ? profFull(d) : 'Prof. ____________________');
+    const sec = byId('docenti', v.segretario), coo = byId('docenti', v.coordinatore);
+    return {
+      intest1: v.intest1, intest2: v.intest2,
+      titolo: dip ? 'DIPARTIMENTO DI SCIENZE AGRARIE' : 'CONSIGLIO DI CLASSE ' + (cl ? String(cl.nome).replace('°', '^') : ''),
+      anno: 'Anno scolastico ' + anno, dataRiga: 'Data ' + (v.data ? L.fmtDate(v.data) : '__/__/____') + ' (verbale n. ' + (v.numero || '__') + ')',
+      meta: [['Segretario (nome e cognome)', sec ? profFull(sec) : ''], [dip ? 'Coordinatore di dipartimento (nome e cognome)' : 'Coordinatori (nome e cognome)', coo ? profFull(coo) : ''], ['Presidente (Dirigente o suo delegato)', v.presidente || '']],
+      docTitolo: dip ? 'Elenco docenti del dipartimento' : 'Elenco docenti del consiglio di classe',
+      docenti: council.map((x) => [L.nomeMaiusc(x.d.nome), x.mats.join(', ')]),
+      intro: 'Il giorno ' + dt.g + ' del mese di ' + dt.mese + " dell'anno " + dt.a + ' alle ore ' + (L.oraIt(v.ora) || '__.__') + ' ' + (v.luogo || '') + " dell'" + (v.istituto || '') + ' di ' + (v.citta || '') + ' si riunisce ' + (dip ? 'il Dipartimento di Scienze Agrarie' : 'il Consiglio di Classe') + ', per trattare il seguente ordine del giorno:',
+      odg: odgLines, corpo, chiusura: 'Non essendoci altro ' + (dip ? 'il Dipartimento' : 'il C.d.C.') + ' si chiude alle ore ' + fine + '.',
+      luogoData: (v.citta || '') + ', lì ' + (v.data ? L.fmtDate(v.data) : '__/__/____'),
+      firme: [['FIRMA PRESIDENTE', v.presidente || 'Prof. ____________________'], ['FIRMA COORDINATORE', sig(coo)], ['FIRMA SEGRETARIO', sig(sec)]],
+    };
+  }
+  function newVerbale(tipo, classe) {
+    const prev = rows('verbali').filter((x) => x.tipo === tipo && (tipo !== 'Consiglio di classe' || x.classe === classe)).sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0];
+    const base = prev || rows('verbali').slice().sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0] || {};
+    const me = rows('docenti').find((d) => /mutti/i.test(d.nome));
+    const v = { id: uid(), tipo, classe: tipo === 'Consiglio di classe' ? (classe || '') : '', numero: prev ? (Number(prev.numero) || 0) + 1 : 1, data: L.today(), ora: base.ora || '', oraFine: '', luogo: base.luogo || "nell'aula-informatica",
+      segretario: base.segretario || '', coordinatore: base.coordinatore || (me ? me.id : ''), presidente: base.presidente || '', intest1: base.intest1 || 'ITAS "VINCENZO LUPARIA"', intest2: base.intest2 || 'Via Luparia, 14 - ROSIGNANO M.TO (AL) - FRAZ. SAN MARTINO',
+      istituto: base.istituto || 'Istituto Superiore “V. LUPARIA”', citta: base.citta || 'SAN MARTINO DI ROSIGNANO', assenti: [], odg: [], updated: NOW() };
+    rows('verbali').push(v); save(); location.hash = '#/scuola/verbale/' + v.id; route();
+  }
+  function viewVerbale(id) {
+    const v = byId('verbali', id);
+    if (!v) return h('div', { class: 'empty' }, 'Verbale non trovato.');
+    if (!Array.isArray(v.odg)) v.odg = []; if (!Array.isArray(v.assenti)) v.assenti = [];
+    const dip = v.tipo === 'Dipartimento Scienze Agrarie', touch = () => { v.updated = NOW(); save(); };
+    const council = verbCouncil(v);
+    const prevV = rows('verbali').filter((x) => x.id !== v.id && x.tipo === v.tipo && x.classe === v.classe && (x.data || '') < (v.data || '9999')).sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0];
+    const pres = h('div', { class: 'chips' });
+    const drawPres = () => pres.replaceChildren(...council.map((x) => { const off = v.assenti.includes(x.d.id); return h('a', { class: 'chip' + (off ? '' : ' on'), href: '#', title: x.mats.join(', '), onclick: (e) => { e.preventDefault(); v.assenti = off ? v.assenti.filter((i) => i !== x.d.id) : v.assenti.concat(x.d.id); touch(); drawPres(); } }, (off ? '✗ ' : '✓ ') + x.d.nome + (x.mats.length ? ' · ' + x.mats.join(', ') : '')); }));
+    drawPres();
+    const list = h('div');
+    const drawOdg = () => {
+      list.replaceChildren(...v.odg.map((p, i) => {
+        const tit = h('input', { type: 'text', value: p.titolo || '', placeholder: 'Punto ' + (i + 1), 'aria-label': 'Titolo punto ' + (i + 1), oninput: (e) => { p.titolo = e.target.value; touch(); } });
+        const txt = h('textarea', { placeholder: i === 0 ? 'Vuoto = testo automatico (presenti/assenti)' : 'Testo del verbale per questo punto…', style: 'min-height:90px', oninput: (e) => { p.testo = e.target.value; touch(); } }); txt.value = p.testo || '';
+        const cb = h('input', { type: 'checkbox', onchange: (e) => { p.completo = e.target.checked; touch(); } }); cb.checked = !!p.completo;
+        return h('div', { class: 'box' }, h('div', { class: 'bar' }, h('b', {}, (i + 1) + ')'), tit),
+          h('label', { class: 'note' }, cb, dip ? ' dipartimento allargato' : ' con genitori e alunni (consiglio completo)'), txt,
+          h('div', { class: 'bar' }, btn('↑', () => { if (i) { [v.odg[i - 1], v.odg[i]] = [v.odg[i], v.odg[i - 1]]; touch(); drawOdg(); } }), btn('↓', () => { if (i < v.odg.length - 1) { [v.odg[i + 1], v.odg[i]] = [v.odg[i], v.odg[i + 1]]; touch(); drawOdg(); } }),
+            btn('Elimina punto', () => { v.odg.splice(i, 1); touch(); drawOdg(); })));
+      }));
+    };
+    drawOdg();
+    const newP = (t, c) => ({ id: uid(), titolo: t || '', testo: '', completo: !!c });
+    const tplSel = h('select', { 'aria-label': 'Modello ordine del giorno' }, h('option', { value: '' }, 'Carica un modello di ordine del giorno…'), Object.keys(ODG_TPL).map((k) => h('option', { value: k }, k)));
+    tplSel.addEventListener('change', () => {
+      const k = tplSel.value; tplSel.value = ''; if (!k) return;
+      if (v.odg.some((p) => p.titolo || p.testo) && !confirm('Sostituire l\'ordine del giorno attuale con il modello?')) return;
+      v.odg = ODG_TPL[k].map((x) => newP(x[0], x[1])); touch(); drawOdg();
+    });
+    const openImportOdg = () => {
+      const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+      const ta = h('textarea', { style: 'min-height:200px', placeholder: '1) Insediamento componenti\n2) Analisi della classe…\n\nPer i punti con genitori/alunni scrivi prima la riga: Consiglio di classe completo' });
+      dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, 'Importa ordine del giorno'), h('p', { class: 'note' }, 'Incolla il testo della convocazione: un punto per riga. I numeri iniziali sono tolti. Dopo una riga che contiene “completo” (o “genitori”) i punti successivi sono con genitori e alunni.'), ta,
+        h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Annulla'), h('button', { type: 'button', class: 'pri', onclick: () => {
+          let comp = false; const out = [];
+          for (const raw of ta.value.split(/\r?\n/)) {
+            const s = raw.trim(); if (!s) continue;
+            if (/^(solo docenti)/i.test(s)) { comp = false; continue; }
+            if (/completo|rappresentant/i.test(s) && !/^\d+\s*[).]/.test(s) && s.length < 90) { comp = true; continue; }
+            out.push(newP(s.replace(/^\d+\s*[).\-]\s*/, '').replace(/[;.]\s*$/, ''), comp));
+          }
+          if (!out.length) return toast('Nessun punto trovato');
+          v.odg = v.odg.concat(out); touch(); dlg.close(); drawOdg(); toast(out.length + ' punti aggiunti');
+        } }, 'Importa'))));
+      dlg.showModal();
+    };
+    const doc = async () => {
+      const bytes = L.buildVerbaleDocx(verbData(v));
+      const nm = 'Verbale ' + (dip ? 'Dipartimento Agrarie' : 'CdC ' + (lab('classi', v.classe) || '')) + ' n.' + (v.numero || '') + ' ' + (v.data || '') + '.docx';
+      await deliver(bytes, nm.replace(/[\/\\:*?"<>|°]/g, ''), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    };
+    const asText = () => { const d = verbData(v); return [d.titolo, d.anno, d.dataRiga, '', d.intro, ...d.odg.map((o) => o.t), '', ...d.corpo.flatMap((s) => (s.h ? [s.t] : [s.t, s.testo, ''])), d.chiusura, d.luogoData].join('\n'); };
+    const head = h('div', { class: 'vhead' }, h('h2', {}, '📝 ' + ENT.verbali.title(v)), h('div', { class: 'vtags' }, h('span', { class: 'pill' }, v.tipo), v.data && h('span', { class: 'pill' }, L.fmtDate(v.data)), v.ora && h('span', { class: 'pill' }, 'ore ' + L.oraIt(v.ora))));
+    const meta = h('p', { class: 'note' }, 'Segretario: ' + (lab('docenti', v.segretario) || '—') + ' · Coordinatore: ' + (lab('docenti', v.coordinatore) || '—') + ' · Presidente: ' + (v.presidente || '—'));
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verbali' }, '← Verbali')), head, meta,
+      h('div', { class: 'bar' }, btn('✏️ Dati del verbale', () => openForm('verbali', v), ''), btn('⬇️ Scarica Word (.docx)', doc, 'pri'), btn('📋 Copia testo', () => showText('Verbale – testo', asText(), 'Testo semplice del verbale.'), '')));
+    if (!council.length) root.append(h('div', { class: 'empty' }, dip ? 'Nessun docente del Dipartimento: in “Docenti” spunta “Dipartimento Scienze Agrarie”.' : 'Nessun docente per questa classe: aggiungili in “Docenti” e poi in “Consigli di classe” (classe + materia + docente).'));
+    else root.append(h('h3', {}, 'Presenti (tocca per segnare un’assenza)'), pres);
+    root.append(h('h3', {}, 'Ordine del giorno e testo'), h('div', { class: 'bar' }, tplSel, btn('📥 Importa ordine del giorno', openImportOdg, ''),
+      prevV && btn('↩︎ Copia i testi dal verbale n. ' + (prevV.numero || '?'), () => {
+        if (!prevV.odg || !prevV.odg.length) return toast('Il verbale precedente non ha punti');
+        if (!v.odg.length) v.odg = prevV.odg.map((p) => newP(p.titolo, p.completo));
+        let n = 0; v.odg.forEach((p) => { if (p.testo && p.testo.trim()) return; const m = prevV.odg.find((q) => (q.titolo || '').trim().toLowerCase() === (p.titolo || '').trim().toLowerCase()); if (m && m.testo) { p.testo = m.testo; n++; } });
+        touch(); drawOdg(); toast(n + ' testi copiati');
+      }, '')), list, h('div', { class: 'bar' }, btn('+ Aggiungi punto', () => { v.odg.push(newP('', false)); touch(); drawOdg(); }, 'pri')));
     return root;
   }
 
@@ -1360,7 +1529,7 @@
     renderNav(mod.id);
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
-      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg)
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg)
       : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
     fitTables(app);
   }

@@ -64,3 +64,9 @@ test('parseVerifica: blocco di testo', () => {
   assert.deepStrictEqual(p.parti.map((x) => [x.name, x.max]), [['Vero o falso', 8], ['Domanda 2', 8.5], ['Domanda 3', 10]]);
   assert.ok(L.parseVerifica('Verifica: x').errori.length >= 2);
 });
+
+test('buildVerbaleDocx produce uno zip docx', () => {
+  const u = L.buildVerbaleDocx({ titolo: 'CONSIGLIO DI CLASSE 4^B', odg: [{ t: '1) A & B' }], corpo: [{ t: '1) A', testo: 'x' }], docenti: [['ROSSI', 'Italiano']], firme: [['FIRMA', 'Prof. X']] });
+  assert.strictEqual(u[0], 0x50); assert.strictEqual(u[1], 0x4b);
+  assert.ok(Buffer.from(u).toString('latin1').includes('word/document.xml'));
+});

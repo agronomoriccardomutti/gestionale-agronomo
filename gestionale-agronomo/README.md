@@ -132,3 +132,8 @@ Le classi 3°A e 3°B hanno Genio Rurale e Industrie agrarie. Ogni verifica ha i
 ## Scheda operatore: contatti e appunti
 
 Nella scheda azienda (Ispezioni → Aziende) ci sono Email, Telefono fisso e Cellulare (toccando si chiama o si scrive). Il pulsante «📞 Crea appunto da contattare» crea un promemoria con contatto e «ispezione prevista il gg/mm/aaaa» (la data si propone dalla prossima ispezione dell'azienda); gli appunti compaiono nella scheda e in Promemoria.
+
+
+## Verbali (consiglio di classe e dipartimento)
+
+Scuola → *Docenti* (formato “Cognome Nome”, spunta “Dipartimento Scienze Agrarie” per chi ne fa parte) → *Consigli di classe* (classe + materia + docente: se cambia un docente basta cambiare il nome) → *Verbali*. Nella tua classe spunta “Sono il coordinatore” per avere il pulsante “+ Verbale CdC …”. Nel verbale: presenti/assenti con un tocco, ordine del giorno da modello o incollato, testo per punto, “copia i testi dal verbale precedente” e **Scarica Word (.docx)** con intestazione, elenco docenti, firme. I verbali restano solo sul dispositivo (contengono dati sugli studenti).

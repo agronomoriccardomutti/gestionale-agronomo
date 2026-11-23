@@ -327,5 +327,70 @@
     return out;
   }
 
-  return { parseVerifica, quarterStart, TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
+  /* ---------- Verbali (consiglio di classe / dipartimento) -> .docx ---------- */
+  const dx = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  function dxRun(t, o) {
+    o = o || {};
+    const rp = '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>' + (o.b ? '<w:b/>' : '') + (o.i ? '<w:i/>' : '') + (o.u ? '<w:u w:val="single"/>' : '') + '<w:sz w:val="' + (o.sz || 24) + '"/><w:szCs w:val="' + (o.sz || 24) + '"/></w:rPr>';
+    return '<w:r>' + rp + '<w:t xml:space="preserve">' + dx(t) + '</w:t></w:r>';
+  }
+  function dxPar(t, o) {
+    o = o || {};
+    const pp = '<w:pPr>' + (o.keep ? '<w:keepNext/>' : '') + '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after == null ? 120 : o.after) + '" w:line="' + (o.line || 252) + '" w:lineRule="auto"/>'
+      + (o.ind ? '<w:ind w:left="' + o.ind + '"/>' : '') + '<w:jc w:val="' + (o.al || 'both') + '"/></w:pPr>';
+    const runs = Array.isArray(t) ? t.map((x) => dxRun(x.t, x)).join('') : (t === '' || t == null ? '' : dxRun(t, o));
+    return '<w:p>' + pp + runs + '</w:p>';
+  }
+  function dxTable(rowsArr, widths, o) {
+    o = o || {};
+    const bd = o.noBorder ? '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>'
+      : '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((s) => '<w:' + s + ' w:val="single" w:sz="4" w:space="0" w:color="000000"/>').join('') + '</w:tblBorders>';
+    const tot = widths.reduce((a, x) => a + x, 0);
+    let x = '<w:tbl><w:tblPr><w:tblW w:w="' + tot + '" w:type="dxa"/>' + bd + '<w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>' + widths.map((w) => '<w:gridCol w:w="' + w + '"/>').join('') + '</w:tblGrid>';
+    rowsArr.forEach((r, ri) => {
+      x += '<w:tr>' + (o.cantSplit ? '<w:trPr><w:cantSplit/></w:trPr>' : '');
+      r.forEach((c, i) => { x += '<w:tc><w:tcPr><w:tcW w:w="' + widths[i] + '" w:type="dxa"/></w:tcPr>' + dxPar(c, { b: (o.headRow && ri === 0) || (o.boldFirstCol && i === 0), al: 'left', after: 0, sz: o.sz || 22 }) + '</w:tc>'; });
+      x += '</w:tr>';
+    });
+    return x + '</w:tbl>';
+  }
+  /* d = { intest1, intest2, titolo, anno, dataRiga, meta:[[etichetta, valore]], docTitolo, docHead:[a,b], docenti:[[a,b]], intro, odg:[{t, h?}], corpo:[{t, testo, h?}], chiusura, luogoData, firme:[[etichetta, nome]] } */
+  function buildVerbaleDocx(d) {
+    const enc = new TextEncoder();
+    let b = '';
+    b += dxPar(d.intest1 || '', { b: true, al: 'center', sz: 28, after: 0 }) + dxPar(d.intest2 || '', { al: 'center', sz: 22, after: 200 });
+    b += dxPar(d.titolo || '', { b: true, al: 'center', sz: 26, after: 40 }) + dxPar(d.anno || '', { al: 'center', after: 40 }) + dxPar(d.dataRiga || '', { al: 'center', after: 160 });
+    if (d.meta && d.meta.length) b += dxTable(d.meta, [3800, 5800], { boldFirstCol: true }) + dxPar('', { after: 120 });
+    if (d.docenti && d.docenti.length) {
+      b += dxPar(d.docTitolo || 'Elenco docenti', { b: true, al: 'left', after: 80, keep: true });
+      b += dxTable([d.docHead || ['Professore', 'Materie']].concat(d.docenti), d.docHead && d.docHead.length === 3 ? [3600, 4200, 1800] : [3800, 5800], { headRow: true, cantSplit: true, sz: 20 }) + dxPar('', { after: 120 });
+    }
+    b += dxPar(d.intro || '', { after: 120 });
+    for (const o of d.odg || []) b += o.h ? dxPar(o.t, { b: true, al: 'left', before: 80, after: 40, keep: true }) : dxPar(o.t, { al: 'left', ind: 360, after: 40 });
+    b += dxPar('', { after: 120 });
+    for (const s of d.corpo || []) {
+      b += s.h ? dxPar(s.t, { i: true, al: 'left', before: 120, after: 120 }) : dxPar(s.t, { b: true, al: 'left', before: 160, after: 80, keep: true });
+      if (!s.h) for (const line of String(s.testo || '').split(/\r?\n/)) b += dxPar(line, { after: line ? 80 : 0 });
+    }
+    b += dxPar(d.chiusura || '', { before: 200, after: 120 });
+    b += dxPar(d.luogoData || '', { al: 'left', after: 200 });
+    if (d.firme && d.firme.length) b += dxTable(d.firme.map((f) => [f[0], f[1]]), [4200, 5400], { noBorder: true, cantSplit: true, boldFirstCol: true });
+    const sect = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>';
+    const doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>' + b + sect + '</w:body></w:document>';
+    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:lang w:val="it-IT"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+    const files = [
+      { name: '[Content_Types].xml', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>') },
+      { name: '_rels/.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>') },
+      { name: 'word/_rels/document.xml.rels', data: enc.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>') },
+      { name: 'word/styles.xml', data: enc.encode(styles) },
+      { name: 'word/document.xml', data: enc.encode(doc) },
+    ];
+    return zipStore(files);
+  }
+  const dataEstesa = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? { g: +m[3], mese: MESI[+m[2] - 1], a: +m[1] } : { g: '__', mese: '__________', a: '____' }; };
+  const oraIt = (t) => String(t || '').replace(':', '.');
+  const nomeMaiusc = (s) => String(s || '').trim().toUpperCase();
+  const lstNomi = (a) => (a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1]);
+
+  return { buildVerbaleDocx, dataEstesa, oraIt, nomeMaiusc, lstNomi, MESI, parseVerifica, quarterStart, TARIFFE, KM_EURO, notaCalc, periodoLabel, unzipAll, zipStore, buildNotaSpese, quarterFromText, xlsxCells, parseModello22, mergeModelli, quarterEnd, tipoDaNote, splitOperatore, normName, iso, parse, today, addDays, addMonths, diffDays, nextDate, fmtDate, eur, num, buildICS, remindersText, esc, fold };
 });

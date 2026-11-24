@@ -1154,6 +1154,23 @@
       } }, 'Importa'))));
     dlg.showModal();
   }
+
+  // stipendio da mail/link: #/spese/stipendio/1729.56_2026-11-24
+  const parseImportoMail = (txt) => { const m = /importo di\s*([\d.]+,\d{2}|\d+(?:\.\d{1,2})?)\s*euro/i.exec(txt || '') || /([\d.]*\d,\d{2})\s*(?:euro|€)/i.exec(txt || ''); return m ? +m[1].replace(/\./g, '').replace(',', '.') : null; };
+  function openStipendioConferma(imp, data) {
+    const per = spPer(data || L.today()), dup = rows('movimenti').find((m) => m.tipo === 'Entrata' && m.categoria === 'Stipendio' && m.data && spPer(m.data) === per);
+    if (dup) return toast('Stipendio del periodo già registrato (' + L.eur(+dup.importo) + ')');
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const d = h('input', { type: 'date', value: data || L.today() }), im = h('input', { type: 'number', step: '0.01', inputmode: 'decimal', value: imp || '' });
+    const ta = h('textarea', { style: 'min-height:70px', placeholder: 'Incolla qui il testo della mail “accredito emolumenti”: l’importo viene letto da solo' });
+    ta.addEventListener('input', () => { const v = parseImportoMail(ta.value); if (v) im.value = v; });
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '💶 Registra stipendio'), h('p', { class: 'note' }, 'Accredito emolumenti scuola: controlla importo e data.'), h('div', { class: 'fld' }, h('label', {}, 'Data accredito'), d), h('div', { class: 'fld' }, h('label', {}, 'Importo €'), im), imp ? null : ta,
+      h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Annulla'), h('button', { type: 'button', class: 'pri', onclick: () => {
+        const v = +String(im.value).replace(',', '.'); if (!d.value || !(v > 0)) return toast('Servono data e importo');
+        rows('movimenti').push({ id: uid(), tipo: 'Entrata', data: d.value, importo: r2(v), descrizione: 'Stipendio', categoria: 'Stipendio', metodo: 'Bonifico', veicolo: '', updated: NOW() }); save(); SP.per = spPer(d.value); dlg.close(); route(); toast('Stipendio registrato: ' + L.eur(v));
+      } }, 'Registra'))));
+    dlg.showModal();
+  }
   function viewSpese() {
     const T = L.today(), cur = spPer(T); if (!SP.per) SP.per = cur;
     const key = SP.per, t = spTot(key), isCur = key === cur;
@@ -1165,7 +1182,7 @@
     // banner stipendio
     if (isCur && !t.stip) {
       const d = h('input', { type: 'date', value: T >= key && T <= spEnd(key) ? T : key }), im = h('input', { type: 'number', step: '0.01', inputmode: 'decimal', placeholder: 'Importo €', value: spLastStip() || '' });
-      body.append(h('div', { class: 'sp-ban' }, h('div', {}, h('b', {}, 'Nuovo periodo. '), 'Inserisci lo stipendio per far partire il conteggio.'), h('div', { class: 'bar' }, d, im, btn('Registra stipendio', () => { const v = +String(im.value).replace(',', '.'); if (!d.value || !(v > 0)) return toast('Data e importo'); mov.push({ id: uid(), tipo: 'Entrata', data: d.value, importo: r2(v), descrizione: 'Stipendio', categoria: 'Stipendio', metodo: 'Bonifico', veicolo: '', updated: NOW() }); save(); route(); }, 'pri'))));
+      body.append(h('div', { class: 'sp-ban' }, h('div', {}, h('b', {}, 'Nuovo periodo. '), 'Inserisci lo stipendio per far partire il conteggio.'), h('div', { class: 'bar' }, d, im, btn('📧 Da mail', () => openStipendioConferma('', ''), ''), btn('Registra stipendio', () => { const v = +String(im.value).replace(',', '.'); if (!d.value || !(v > 0)) return toast('Data e importo'); mov.push({ id: uid(), tipo: 'Entrata', data: d.value, importo: r2(v), descrizione: 'Stipendio', categoria: 'Stipendio', metodo: 'Bonifico', veicolo: '', updated: NOW() }); save(); route(); }, 'pri'))));
     }
     const quota = t.entrate > 0 ? t.uscite / t.entrate : 0;
     body.append(tiles([['Entrate', L.eur(t.entrate)], ['Uscite', L.eur(t.uscite) + (t.entrate > 0 ? ' (' + Math.round(quota * 100) + '%)' : ''), quota > 1], ['Disponibile', L.eur(t.saldo), t.saldo < 0], ['Contanti', L.eur(spCash())]]));
@@ -1836,7 +1853,7 @@
     renderNav(mod.id);
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
-      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && !ek ? viewSpese() : mod.id === 'ispezioni' && ek === 'mappa' ? viewMappa()
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && ek === 'stipendio' ? ((() => { const [i, d] = String(arg || '').split('_'); history.replaceState(null, '', '#/spese'); setTimeout(() => openStipendioConferma(+i || '', d || ''), 50); })(), viewSpese()) : mod.id === 'spese' && !ek ? viewSpese() : mod.id === 'ispezioni' && ek === 'mappa' ? viewMappa()
       : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
     fitTables(app);
   }

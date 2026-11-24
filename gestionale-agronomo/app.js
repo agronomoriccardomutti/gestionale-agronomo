@@ -223,7 +223,7 @@
       fields: [
         { k: 'titolo', l: 'Titolo', t: 'text', list: ['Sig.', 'Sig.ra', 'Dott.', 'Dott.ssa', 'Dott. Agr.', 'Ing.', 'Arch.', 'Geom.', 'Avv.', 'Prof.', 'Prof.ssa', 'Spett.le'] },
         { k: 'cognome', l: 'Cognome', t: 'text' },
-        { k: 'nome', l: 'Nome / ragione sociale', t: 'text', req: 1 },
+        { k: 'nome', l: 'Nome / ragione sociale', t: 'text' },
         { k: 'telefono', l: 'Telefono', t: 'tel' },
         { k: 'email', l: 'Email', t: 'email' },
         { k: 'cfpiva', l: 'C.F. / P.IVA', t: 'text' },
@@ -235,7 +235,7 @@
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
       fields: [
         { k: 'cliente', l: 'Cliente', t: 'ref', to: 'clienti' },
-        { k: 'tipo', l: 'Tipo pratica', t: 'text', req: 1, list: ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'] },
+        { k: 'tipo', l: 'Tipo pratica', t: 'text', list: ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'] },
         { k: 'descrizione', l: 'Descrizione', t: 'text' },
         { k: 'scadenza', l: 'Scadenza', t: 'date' },
         { k: 'stato', l: 'Stato', t: 'select', opts: STATI_PRATICA, def: 'Da avviare', req: 1 },

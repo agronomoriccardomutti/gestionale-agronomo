@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -46,6 +46,9 @@
   const gmailSearch = (q) => 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
   const gmailCompose = (to, subj) => 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + (subj ? '&su=' + encodeURIComponent(subj) : '');
   const gmailActions = [{ label: '✉️ Scrivi (Gmail)', show: (r) => !!r.email, href: (r) => gmailCompose(r.email) }, { label: '🔍 Mail in Gmail', show: (r) => !!(r.email || r.nome || r.ragione), href: (r) => gmailSearch(r.email ? 'from:' + r.email + ' OR to:' + r.email : '"' + (r.nome || r.ragione) + '"') }];
+  const SP_CAT = ['Spesa alimentare','Carburante','Manutenzione veicoli','Assicurazione/Bollo','Casa/Utenze','Telefono/Internet','Farmacia','Salute','Abbigliamento','Bar','Ristoranti/Svago','Regali','Libri/Cultura','Figlie','Abbonamenti','Rate/Finanziamenti','Tasse/Imposte','Altro'];
+  const SP_CAT_ALL = SP_CAT.concat(['Stipendio', 'Consulenze agronomo', 'Rimborsi', 'Regali ricevuti', 'Altre entrate', 'Prelievo contanti']);
+  const SP_VEI = ['Nissan', 'Jeep Compass', 'Africa Twin', 'Trattore Landini'];
   const ENT = {
     parcelle: {
       label: 'Parcelle', one: 'parcella', order: { k: 'nome', dir: 1 },
@@ -288,6 +291,31 @@
         { k: 'testo', l: 'Cosa ci siamo detti', t: 'textarea' }],
       title: (r) => (r.tipo || 'Contatto') + ' – ' + lab('aziende', r.azienda), cols: ['azienda', 'tipo', 'data'],
     },
+    movimenti: {
+      label: 'Movimenti', one: 'movimento', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Uscita', 'Entrata', 'Prelievo'], req: 1 },
+        { k: 'data', l: 'Data', t: 'date', req: 1, def: 'today' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', req: 1, fmt: 'eur' },
+        { k: 'descrizione', l: 'Descrizione', t: 'text', req: 1 },
+        { k: 'categoria', l: 'Categoria', t: 'text', list: SP_CAT_ALL },
+        { k: 'metodo', l: 'Pagamento', t: 'select', opts: ['Contanti', 'Carta', 'Bonifico'] },
+        { k: 'veicolo', l: 'Veicolo', t: 'select', opts: SP_VEI }],
+      title: (r) => (r.tipo === 'Entrata' ? '+' : r.tipo === 'Uscita' ? '−' : '') + L.eur(+r.importo || 0) + ' · ' + (r.descrizione || ''), cols: ['data', 'categoria', 'metodo'],
+    },
+    ricorrenti: {
+      label: 'Spese ricorrenti', one: 'spesa ricorrente', order: { k: 'prossima', dir: 1 },
+      fields: [
+        { k: 'descrizione', l: 'Descrizione', t: 'text', req: 1 },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', req: 1, fmt: 'eur' },
+        { k: 'mesi', l: 'Ogni quanti mesi', t: 'select', opts: ['1', '2', '3', '4', '6', '12'], req: 1 },
+        { k: 'prossima', l: 'Prossima scadenza', t: 'date', req: 1, def: 'today' },
+        { k: 'categoria', l: 'Categoria', t: 'text', list: SP_CAT },
+        { k: 'metodo', l: 'Pagamento', t: 'select', opts: ['Carta', 'Bonifico', 'Contanti'] },
+        { k: 'veicolo', l: 'Veicolo', t: 'select', opts: SP_VEI }],
+      title: (r) => (r.descrizione || '') + ' – ' + L.eur(+r.importo || 0), cols: ['prossima', 'mesi', 'categoria'],
+      events: (r) => (r.prossima ? [{ date: r.prossima, title: 'Scadenza: ' + r.descrizione + ' (' + L.eur(+r.importo || 0) + ')' }] : []),
+    },
     docenti: {
       label: 'Docenti', one: 'docente', order: { k: 'nome', dir: 1 },
       fields: [
@@ -395,6 +423,7 @@
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
+    { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
   ];
@@ -1081,6 +1110,119 @@
     return root;
   }
 
+  /* ---------- Spese personali (periodo dal 23 al 22) ---------- */
+  const SP = { per: '', q: '', tipo: 'Uscita', conf: null, rconf: null };
+  const SP_G = 23, pad2 = (n) => String(n).padStart(2, '0');
+  const spIso = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  const spPer = (s) => { let [y, m, d] = s.split('-').map(Number); if (d < SP_G) { m -= 1; if (m === 0) { m = 12; y -= 1; } } return y + '-' + pad2(m) + '-' + pad2(SP_G); };
+  const spShift = (k, n) => { let [y, m] = k.split('-').map(Number); m += n; while (m > 12) { m -= 12; y++; } while (m < 1) { m += 12; y--; } return y + '-' + pad2(m) + '-' + pad2(SP_G); };
+  const spEnd = (k) => { const [y, m] = spShift(k, 1).split('-').map(Number); return y + '-' + pad2(m) + '-' + pad2(SP_G - 1); };
+  const spBrev = (s) => { const [, m, d] = s.split('-').map(Number); return d + ' ' + ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'][m - 1]; };
+  const spLab = (k) => spBrev(k) + ' – ' + spBrev(spEnd(k)) + ' ' + spEnd(k).slice(0, 4);
+  const spDays = (x, y) => Math.round((new Date(y + 'T12:00') - new Date(x + 'T12:00')) / 86400000);
+  const spAddM = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(y, m - 1 + n, 1), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(Math.min(d, last)); };
+  function spTot(key) {
+    const t = { entrate: 0, uscite: 0, stip: false, cat: {} };
+    for (const m of rows('movimenti')) {
+      if (!m.data || spPer(m.data) !== key) continue; const v = +m.importo || 0;
+      if (m.tipo === 'Entrata') { t.entrate += v; if (m.categoria === 'Stipendio') t.stip = true; } else if (m.tipo === 'Uscita') { t.uscite += v; t.cat[m.categoria || 'Altro'] = (t.cat[m.categoria || 'Altro'] || 0) + v; }
+    }
+    t.entrate = r2(t.entrate); t.uscite = r2(t.uscite); t.saldo = r2(t.entrate - t.uscite); return t;
+  }
+  const spCash = () => { let p = 0, s = 0; for (const m of rows('movimenti')) { const v = +m.importo || 0; if (m.tipo === 'Prelievo') p += v; else if (m.tipo === 'Uscita' && m.metodo === 'Contanti') s += v; } return r2(p - s); };
+  const spLastStip = () => { const s = rows('movimenti').filter((m) => m.tipo === 'Entrata' && m.categoria === 'Stipendio').sort((x, y) => (y.data || '').localeCompare(x.data || '')); return s.length ? +s[0].importo : null; };
+  const spReserve = (key) => { let tot = 0; for (const r of rows('ricorrenti')) { const q = (+r.importo || 0) / (+r.mesi || 1); let pg = 0; for (const m of rows('movimenti')) if (m.ricorrenteId === r.id && m.tipo === 'Uscita' && m.data && spPer(m.data) === key) pg += +m.importo || 0; tot += Math.max(0, q - pg); } return r2(tot); };
+  function spPay(r) {
+    const now = NOW();
+    rows('movimenti').push({ id: uid(), tipo: 'Uscita', data: L.today(), importo: r2(+r.importo || 0), descrizione: r.descrizione, categoria: r.categoria || 'Altro', metodo: r.metodo || 'Carta', veicolo: r.veicolo || '', ricorrenteId: r.id, updated: now });
+    r.prossima = spAddM(r.prossima || L.today(), +r.mesi || 1); r.updated = now; save(); route(); toast('Registrata come uscita: ' + r.descrizione);
+  }
+  function openImportSpese() {
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+    const file = h('input', { type: 'file', accept: '.json,application/json' });
+    const ta = h('textarea', { style: 'min-height:120px', placeholder: 'oppure incolla qui il contenuto del file JSON' });
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📥 Importa da “Gestione Spese”'), h('p', { class: 'note' }, 'Carica il file JSON dei movimenti (o incollalo). Quelli già presenti non vengono duplicati.'), file, ta,
+      h('div', { class: 'dlg-btns' }, h('button', { type: 'button', onclick: () => dlg.close() }, 'Annulla'), h('button', { type: 'button', class: 'pri', onclick: async () => {
+        try {
+          const txt = file.files[0] ? await file.files[0].text() : ta.value; const j = JSON.parse(txt);
+          const have = new Set(rows('movimenti').map((x) => x.id)), haveR = new Set(rows('ricorrenti').map((x) => x.id)); let n = 0, nr = 0; const now = NOW();
+          for (const m of j.movimenti || []) if (m && m.data && m.tipo && !have.has(m.id)) { rows('movimenti').push({ id: m.id || uid(), tipo: m.tipo, data: m.data, importo: +m.importo || 0, descrizione: m.descrizione || '', categoria: m.categoria || '', metodo: m.metodo || '', veicolo: m.veicolo || '', ricorrenteId: m.ricorrenteId || '', updated: now }); n++; }
+          for (const r of j.ricorrenti || []) if (r && r.descrizione && !haveR.has(r.id)) { rows('ricorrenti').push({ id: r.id || uid(), descrizione: r.descrizione, importo: +r.importo || 0, mesi: String(r.mesi || 1), prossima: r.prossima || '', categoria: r.categoria || '', metodo: r.metodo || '', veicolo: r.veicolo || '', updated: now }); nr++; }
+          if (j.accantonare != null && !db.settings.accantonare) db.settings.accantonare = +j.accantonare || 0;
+          save(); dlg.close(); route(); toast(n + ' movimenti e ' + nr + ' ricorrenti importati');
+        } catch (e) { toast('File non valido: ' + e.message); }
+      } }, 'Importa'))));
+    dlg.showModal();
+  }
+  function viewSpese() {
+    const T = L.today(), cur = spPer(T); if (!SP.per) SP.per = cur;
+    const key = SP.per, t = spTot(key), isCur = key === cur;
+    const mov = rows('movimenti');
+    const body = h('div');
+    const head = h('div', { class: 'sp-top' }, h('div', { class: 'sp-per' }, btn('‹', () => { SP.per = spShift(key, -1); route(); }, 'sm'), h('div', { class: 'sp-pl' }, h('b', {}, spLab(key)), h('small', {}, isCur ? 'Periodo in corso · ' + Math.max(0, spDays(T, spShift(key, 1))) + ' giorni al prossimo stipendio' : key < cur ? 'Periodo chiuso' : 'Periodo futuro')), key < cur ? btn('›', () => { SP.per = spShift(key, 1); route(); }, 'sm') : h('span', { style: 'width:34px' })),
+      h('div', { class: 'bar' }, btn('📥 Importa', openImportSpese, ''), h('a', { class: 'btnlink', href: '#/spese/movimenti' }, 'Tutti i movimenti'), h('a', { class: 'btnlink', href: '#/spese/ricorrenti' }, 'Ricorrenti')));
+    const root = h('div', { class: 'sp' }, h('h2', {}, '💶 Spese'), head, body);
+    // banner stipendio
+    if (isCur && !t.stip) {
+      const d = h('input', { type: 'date', value: T >= key && T <= spEnd(key) ? T : key }), im = h('input', { type: 'number', step: '0.01', inputmode: 'decimal', placeholder: 'Importo €', value: spLastStip() || '' });
+      body.append(h('div', { class: 'sp-ban' }, h('div', {}, h('b', {}, 'Nuovo periodo. '), 'Inserisci lo stipendio per far partire il conteggio.'), h('div', { class: 'bar' }, d, im, btn('Registra stipendio', () => { const v = +String(im.value).replace(',', '.'); if (!d.value || !(v > 0)) return toast('Data e importo'); mov.push({ id: uid(), tipo: 'Entrata', data: d.value, importo: r2(v), descrizione: 'Stipendio', categoria: 'Stipendio', metodo: 'Bonifico', veicolo: '', updated: NOW() }); save(); route(); }, 'pri'))));
+    }
+    const quota = t.entrate > 0 ? t.uscite / t.entrate : 0;
+    body.append(tiles([['Entrate', L.eur(t.entrate)], ['Uscite', L.eur(t.uscite) + (t.entrate > 0 ? ' (' + Math.round(quota * 100) + '%)' : ''), quota > 1], ['Disponibile', L.eur(t.saldo), t.saldo < 0], ['Contanti', L.eur(spCash())]]));
+    // budget settimanale
+    const wk = h('div', { class: 'sp-week' }); const wOut = h('div'); const acc = h('input', { type: 'number', step: '10', min: '0', inputmode: 'decimal', placeholder: '0', value: db.settings.accantonare || '' });
+    const drawWeek = () => {
+      if (!isCur) { const sett = spDays(key, spShift(key, 1)) / 7; wOut.replaceChildren(h('div', { class: 'sp-big' }, L.eur(t.uscite / sett)), h('p', { class: 'note' }, 'Spesa media a settimana (uscite ÷ ' + fmt1(sett) + ' settimane).')); return; }
+      const stim = t.entrate <= 0, ent = stim ? (spLastStip() || 0) : t.entrate, risp = +String(acc.value).replace(',', '.') || 0, riserva = spReserve(key), accT = risp + riserva;
+      const giorni = Math.max(1, spDays(T, spShift(key, 1))), resto = r2(ent - accT - t.uscite), sett = resto / giorni * 7;
+      const d = new Date(), lun = new Date(d); lun.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const ini = spIso(lun) < key ? key : spIso(lun);
+      let spSett = 0; for (const m of mov) if (m.tipo === 'Uscita' && m.data >= ini && m.data <= T) spSett += +m.importo || 0; spSett = r2(spSett);
+      const prima = r2(t.uscite - spSett), gi = Math.max(1, spDays(ini, spShift(key, 1))), bud = Math.max(0, (ent - accT - prima) / gi * 7), q = bud > 0 ? spSett / bud : spSett > 0 ? 2 : 0;
+      wOut.replaceChildren(h('div', { class: 'sp-big' + (resto < 0 ? ' neg' : '') }, L.eur(giorni >= 7 ? sett : resto)),
+        h('p', { class: 'note' }, resto < 0 ? 'Hai già superato il limite del periodo di ' + L.eur(-resto) + '.' : giorni >= 7 ? 'Circa ' + L.eur(resto / giorni) + ' al giorno per i prossimi ' + giorni + ' giorni, fino al ' + spBrev(spEnd(key)) + '.' + (stim ? ' Stima sull’ultimo stipendio.' : '') : 'Restano ' + giorni + ' giorni: puoi spendere ancora questa somma fino al ' + spBrev(spEnd(key)) + '.'),
+        h('div', { class: 'sp-bar' + (q > 1 ? ' over' : '') }, h('i', { style: 'width:' + Math.min(100, q * 100) + '%' })),
+        h('p', { class: 'note' + (q > 1 ? ' neg' : '') }, 'Questa settimana (dal ' + spBrev(ini) + '): spesi ' + L.eur(spSett) + ' su ' + L.eur(bud) + (q > 1 ? ' — sei oltre.' : '.')),
+        h('div', { class: 'kv' }, [['Ricorrenti da coprire', L.eur(riserva)], ['Risparmio', L.eur(risp)], ['Entrate', L.eur(ent) + (stim ? ' (stima)' : '')], ['Già speso', L.eur(t.uscite)], ['Ancora da spendere', L.eur(resto)], ['Giorni al 22', String(giorni)]].map(([l, v]) => h('div', {}, h('small', {}, l), v))));
+    };
+    acc.addEventListener('input', () => { db.settings.accantonare = +String(acc.value).replace(',', '.') || 0; save(); drawWeek(); });
+    wk.append(h('h3', {}, isCur ? 'Quanto puoi spendere alla settimana' : 'Quanto hai speso in media a settimana'), wOut, isCur && h('div', { class: 'fld' }, h('label', {}, 'Risparmio da mettere da parte nel periodo €'), acc));
+    drawWeek(); body.append(wk);
+    // ricorrenti
+    const ric = rows('ricorrenti').slice().sort((x, y) => (x.prossima || '9').localeCompare(y.prossima || '9'));
+    const mese = ric.reduce((s, r) => s + (+r.importo || 0) / (+r.mesi || 1), 0);
+    body.append(h('div', { class: 'az-h' }, h('h3', {}, 'Spese ricorrenti', h('span', { class: 'az-n' }, ric.length)), btn('+ Nuova ricorrente', () => openForm('ricorrenti'), '')),
+      ric.length ? h('p', { class: 'note' }, 'Al mese (media): ' + L.eur(mese) + ' · all’anno: ' + L.eur(mese * 12)) : h('p', { class: 'note' }, 'Bollette, assicurazioni, abbonamenti, rate: la loro quota viene tenuta da parte nel budget settimanale.'),
+      h('div', {}, ric.map((r) => { const g = r.prossima ? spDays(T, r.prossima) : null; return h('div', { class: 'row' + (g != null && g < 0 ? ' late' : ''), tabindex: '0', onclick: () => openForm('ricorrenti', r) }, h('span', { class: 'date' }, r.prossima ? spBrev(r.prossima) : '—'), h('span', { class: 't' }, r.descrizione, h('div', { class: 'note' }, 'ogni ' + (+r.mesi === 1 ? 'mese' : r.mesi + ' mesi') + (g == null ? '' : g < 0 ? ' · scaduta da ' + (-g) + ' gg' : g === 0 ? ' · oggi' : ' · tra ' + g + ' gg'))), h('b', {}, L.eur(+r.importo || 0)), btn('Pagata', () => spPay(r), 'sm')); })));
+    // nuovo movimento
+    const f = {}; const mk = (k, el) => (f[k] = el);
+    const seg = h('div', { class: 'chips' }, ['Uscita', 'Entrata', 'Prelievo'].map((x) => h('a', { class: 'chip' + (SP.tipo === x ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); SP.tipo = x; route(); } }, x)));
+    const catList = SP.tipo === 'Uscita' ? SP_CAT : SP.tipo === 'Entrata' ? ['Stipendio', 'Consulenze agronomo', 'Rimborsi', 'Regali ricevuti', 'Altre entrate'] : [];
+    const sel = (k, opts, v) => { const s = h('select', {}, opts.map((o) => h('option', { value: o }, o))); s.value = v; return mk(k, s); };
+    const fl = (l, el, cls) => h('div', { class: 'fld' + (cls ? ' ' + cls : '') }, h('label', {}, l), el);
+    const catSel = SP.tipo !== 'Prelievo' ? sel('categoria', catList, catList[0]) : null, vei = h('select', {}, h('option', { value: '' }, '—'), SP_VEI.map((o) => h('option', { value: o }, o))); mk('veicolo', vei);
+    const veiFld = SP.tipo === 'Uscita' ? fl('Veicolo', vei) : null; if (veiFld) { const upd = () => { veiFld.hidden = !['Carburante', 'Manutenzione veicoli', 'Assicurazione/Bollo'].includes(catSel.value); }; catSel.addEventListener('change', upd); upd(); }
+    const dt = mk('data', h('input', { type: 'date', value: T })), im = mk('importo', h('input', { type: 'number', step: '0.01', min: '0', inputmode: 'decimal', placeholder: '0,00' })), ds = mk('descrizione', h('input', { type: 'text', placeholder: SP.tipo === 'Entrata' ? 'es. Consulenza' : 'es. Gasolio, Spesa' }));
+    const met = SP.tipo !== 'Prelievo' ? sel('metodo', ['Contanti', 'Carta', 'Bonifico'], SP.tipo === 'Entrata' ? 'Bonifico' : 'Contanti') : null;
+    if (ds && catSel) ds.addEventListener('change', () => { if (SP.tipo === 'Uscita' && /gasolio|benzina|carburante|diesel/i.test(ds.value)) { catSel.value = 'Carburante'; catSel.dispatchEvent(new Event('change')); if (!vei.value) vei.value = 'Nissan'; } });
+    body.append(h('h3', {}, 'Aggiungi movimento'), seg, h('div', { class: 'sp-form' }, fl('Data', dt), fl('Importo €', im), fl('Descrizione', ds, 'w2'), catSel && fl('Categoria', catSel), veiFld, met && fl('Pagamento', met)),
+      h('div', { class: 'bar' }, btn('Aggiungi', () => {
+        const v = +String(im.value).replace(',', '.'); if (!dt.value || !ds.value.trim() || !(v > 0)) return toast('Servono data, descrizione e importo');
+        mov.push({ id: uid(), tipo: SP.tipo, data: dt.value, importo: r2(v), descrizione: ds.value.trim(), categoria: SP.tipo === 'Prelievo' ? 'Prelievo contanti' : catSel.value, metodo: SP.tipo === 'Prelievo' ? 'Contanti' : met.value, veicolo: veiFld && !veiFld.hidden ? vei.value : '', updated: NOW() });
+        save(); if (spPer(dt.value) !== SP.per) SP.per = spPer(dt.value); route(); toast('Aggiunto'); }, 'pri')));
+    // categorie
+    const cats = Object.entries(t.cat).sort((x, y) => y[1] - x[1]), mx = cats.length ? cats[0][1] : 1;
+    body.append(h('h3', {}, 'Uscite per categoria'), cats.length ? h('div', { class: 'sp-cats' }, cats.map(([c, v]) => h('div', { class: 'sp-cat' }, h('span', {}, c), h('div', { class: 'sp-tr' }, h('i', { style: 'width:' + (v / mx * 100) + '%' })), h('b', {}, L.eur(v))))) : h('p', { class: 'note' }, 'Nessuna uscita in questo periodo.'));
+    // movimenti
+    const lst = h('div'); const draw = () => {
+      const q = SP.q.trim().toLowerCase();
+      const list = mov.filter((m) => m.data && spPer(m.data) === key && (!q || ((m.descrizione || '') + ' ' + (m.categoria || '') + ' ' + (m.veicolo || '')).toLowerCase().includes(q))).sort((x, y) => (y.data || '').localeCompare(x.data || ''));
+      lst.replaceChildren(...(list.length ? list.map((m) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('movimenti', m) }, h('span', { class: 'date' }, spBrev(m.data)), h('span', { class: 't' }, m.descrizione + (m.veicolo ? ' · ' + m.veicolo : ''), h('div', { class: 'note' }, [m.categoria, m.tipo === 'Prelievo' ? 'Prelievo' : m.metodo].filter(Boolean).join(' · '))), h('b', { class: m.tipo === 'Entrata' ? 'pos' : '' }, (m.tipo === 'Entrata' ? '+' : m.tipo === 'Uscita' ? '−' : '') + L.eur(+m.importo || 0)))) : [h('p', { class: 'note' }, 'Nessun movimento.')]));
+    };
+    body.append(h('div', { class: 'az-h' }, h('h3', {}, 'Movimenti', h('span', { class: 'az-n' }, mov.filter((m) => m.data && spPer(m.data) === key).length)), h('input', { type: 'search', placeholder: 'Cerca…', value: SP.q, oninput: (e) => { SP.q = e.target.value; draw(); } })), lst);
+    draw();
+    return root;
+  }
+
   function viewCorreggi(vid) {
     const v = byId('verifiche', vid);
     if (!v) return h('div', { class: 'empty' }, 'Verifica non trovata.');
@@ -1635,7 +1777,7 @@
     renderNav(mod.id);
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
-      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg)
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && !ek ? viewSpese()
       : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
     fitTables(app);
   }

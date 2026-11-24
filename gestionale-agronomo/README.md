@@ -137,3 +137,7 @@ Nella scheda azienda (Ispezioni → Aziende) ci sono Email, Telefono fisso e Cel
 ## Verbali (consiglio di classe e dipartimento)
 
 Scuola → *Docenti* (formato “Cognome Nome”, spunta “Dipartimento Scienze Agrarie” per chi ne fa parte) → *Consigli di classe* (classe + materia + docente: se cambia un docente basta cambiare il nome) → *Verbali*. Nella tua classe spunta “Sono il coordinatore” per avere il pulsante “+ Verbale CdC …”. Nel verbale: presenti/assenti con un tocco, ordine del giorno da modello o incollato, testo per punto, “copia i testi dal verbale precedente” e **Scarica Word (.docx)** con intestazione, elenco docenti, firme. I verbali restano solo sul dispositivo (contengono dati sugli studenti).
+
+## Spese personali
+
+Sezione **Spese**: periodo dal 23 al 22, stipendio, budget settimanale (con quota delle ricorrenti e risparmio da accantonare), spese ricorrenti con tasto “Pagata”, movimenti, categorie. Importa i dati del vecchio “Gestione Spese” da *Importa* (file JSON). Movimenti e ricorrenti restano solo sul dispositivo.

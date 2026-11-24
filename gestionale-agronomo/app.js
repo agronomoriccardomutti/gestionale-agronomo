@@ -229,7 +229,7 @@
         { k: 'cfpiva', l: 'C.F. / P.IVA', t: 'text' },
         { k: 'indirizzo', l: 'Indirizzo', t: 'text' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => [r.titolo, r.cognome, r.nome].filter(Boolean).join(' '), sortKey: (r) => r.cognome ? r.cognome + ' ' + (r.nome || '') : (r.nome || ''), cols: ['telefono', 'email'], actions: [{ label: '📬 Mail', show: (r) => !!r.email, fn: (r) => openMailCliente(r) }].concat(gmailActions),
+      title: (r) => [r.titolo, r.cognome, r.nome].filter(Boolean).join(' '), sortKey: (r) => r.cognome ? r.cognome + ' ' + (r.nome || '') : (r.nome || ''), cols: ['telefono', 'email'], actions: [{ label: '➕ Crea pratica', show: () => true, fn: (r) => openForm('pratiche', null, { cliente: r.id }) }, { label: '📬 Mail', show: (r) => !!r.email, fn: (r) => openMailCliente(r) }].concat(gmailActions),
     },
     pratiche: {
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },

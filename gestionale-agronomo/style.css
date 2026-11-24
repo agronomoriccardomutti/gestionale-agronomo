@@ -292,7 +292,7 @@ tr.abs td.nm{opacity:1}
 
 /* ===== Tema: look più morbido e curato (valido in tutta l'app) ===== */
 :root{--bg:#f3f4ee;--bd:#e1e3d8;--ink:#1c281e;--mut:#6a766d;--pri:#2e7a43;--pri-2:#256a39;--chip:#e8efe4;--sh:0 1px 2px rgba(28,40,30,.05),0 4px 14px rgba(28,40,30,.06);--sh-h:0 2px 4px rgba(28,40,30,.07),0 8px 22px rgba(28,40,30,.10);--r:14px}
-@media (prefers-color-scheme:dark){:root{--bg:#111713;--card:#1a221c;--bd:#2a362d;--chip:#243027;--sh:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);--sh-h:0 2px 4px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.35)}}
+@media (prefers-color-scheme:dark){:root{--ink:#e8efe6;--mut:#9aa89c;--pri:#5fae6e;--pri-2:#4f9a5e;--bg:#111713;--card:#1a221c;--bd:#2a362d;--chip:#243027;--sh:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);--sh-h:0 2px 4px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.35)}}
 body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased;background:var(--bg) linear-gradient(180deg,rgba(46,122,67,.05),transparent 240px) no-repeat}
 .top{position:sticky;top:0;z-index:6;background:color-mix(in srgb,var(--card) 88%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--bd);font-weight:600}
 main{padding:18px 16px 24px}
@@ -339,3 +339,4 @@ dialog::backdrop{background:rgba(15,25,18,.5);-webkit-backdrop-filter:blur(3px);
 .sp-pv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 12px;padding:8px 0;border-bottom:1px solid var(--bd);align-items:baseline}
 .sp-pv b{font-variant-numeric:tabular-nums}.sp-pv small{grid-column:1/-1;color:var(--mut)}.sp-pv small.neg{color:var(--warn)}.sp-pv small.pos{color:#2f7d4a}
 .sp-tips{margin:10px 0 6px;padding-left:20px;font-size:14px}.sp-tips li{margin:3px 0}
+@media (prefers-color-scheme:dark){.sp-ban{background:#2e2815;border-color:#7a5f1f;color:#f1dfae}.sp-ban input,.sp-ban button:not(.pri){color:var(--ink)}.sp-ban input::placeholder{color:var(--mut)}}

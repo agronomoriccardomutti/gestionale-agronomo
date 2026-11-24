@@ -35,7 +35,10 @@
 
   /* ---------- Definizione dati ---------- */
   const TIPI_PRATICA = ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
-  const tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
+  const tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...learnedOf('pratiche', 'tipo'), ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
+  /* campi che «imparano»: un valore nuovo scritto a mano viene ricordato e proposto la volta dopo */
+  const learnedOf = (ek, k) => { const l = db.settings && db.settings.learned && db.settings.learned[ek + '.' + k]; return Array.isArray(l) ? l : []; };
+  const learn = (ek, k, v) => { const f = fieldOf(ENT[ek], k), known = new Set([...(f.list || (f.listFn && f.listFn()) || []), ...learnedOf(ek, k)].map((x) => String(x).toLowerCase())); if (known.has(String(v).toLowerCase())) return; db.settings.learned = db.settings.learned || {}; db.settings.learned[ek + '.' + k] = [...learnedOf(ek, k), v]; };
   const STATI_PRATICA = ['Da avviare', 'In corso', 'In attesa', 'Consegnata', 'Chiusa'];
   const lab = (ek, id) => { const r = id && rows(ek).find((x) => x.id === id); return r ? ENT[ek].title(r) : ''; };
   const prodottiMagazzino = () => rows('magazzino').map((r) => r.prodotto).filter(Boolean);
@@ -223,7 +226,7 @@
     clienti: {
       label: 'Clienti', one: 'cliente', order: { k: 'nome', dir: 1 },
       fields: [
-        { k: 'titolo', l: 'Titolo', t: 'text', list: ['Sig.', 'Sig.ra', 'Dott.', 'Dott.ssa', 'Dott. Agr.', 'Ing.', 'Arch.', 'Geom.', 'Avv.', 'Prof.', 'Prof.ssa', 'Spett.le'] },
+        { k: 'titolo', l: 'Titolo', t: 'text', learn: 1, list: ['Sig.', 'Sig.ra', 'Dott.', 'Dott.ssa', 'Dott. Agr.', 'Ing.', 'Arch.', 'Geom.', 'Avv.', 'Prof.', 'Prof.ssa', 'Spett.le'] },
         { k: 'cognome', l: 'Cognome', t: 'text' },
         { k: 'nome', l: 'Nome / ragione sociale', t: 'text' },
         { k: 'telefono', l: 'Telefono', t: 'tel' },
@@ -237,7 +240,7 @@
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
       fields: [
         { k: 'cliente', l: 'Cliente', t: 'ref', to: 'clienti' },
-        { k: 'tipo', l: 'Tipo pratica', t: 'text', listFn: () => tipiPratica() },
+        { k: 'tipo', l: 'Tipo pratica', t: 'text', listFn: () => tipiPratica(), learn: 1 },
         { k: 'descrizione', l: 'Descrizione', t: 'text' },
         { k: 'scadenza', l: 'Scadenza', t: 'date' },
         { k: 'stato', l: 'Stato', t: 'select', opts: STATI_PRATICA, def: 'Da avviare', req: 1 },
@@ -548,7 +551,8 @@
       else {
         el = h('input', { type: f.t === 'number' ? 'number' : f.t, name: f.k, step: f.step, inputmode: f.t === 'number' ? 'decimal' : null, autocomplete: 'off' });
         el.value = val != null ? val : '';
-        const list = f.list || (f.listFn && f.listFn());
+        let list = f.list || (f.listFn && f.listFn());
+        if (f.learn) list = [...(list || []), ...learnedOf(ek, f.k), ...rows(ek).map((x) => (x[f.k] || '').trim()).filter(Boolean)];
         if (list && list.length) {
           const id = 'dl-' + f.k; el.setAttribute('list', id);
           form.append(h('datalist', { id }, [...new Set(list)].map((o) => h('option', { value: o }))));
@@ -572,7 +576,7 @@
         let v = f.t === 'checkbox' ? el.checked : f.t === 'parts' ? el.partsData.map((p) => ({ id: p.id, name: String(p.name).trim() || 'Parte', max: Number(p.max) || 0 })) : el.value.trim();
         if (f.t === 'number') v = v === '' ? '' : Number(v);
         if (f.req && (v === '' || v == null)) { el.focus(); return toast('Compila: ' + f.l); }
-        r[f.k] = v;
+        r[f.k] = v; if (f.learn && v) learn(ek, f.k, v);
       }
       r.updated = new Date().toISOString();
       const i = rows(ek).findIndex((x) => x.id === r.id);
@@ -858,7 +862,7 @@
     dlg.showModal(); draw();
   }
   function tipiSection() {
-    const ta = h('textarea', { rows: 8, spellcheck: 'false' }); ta.value = ((db.settings.tipiPratica && db.settings.tipiPratica.length) ? db.settings.tipiPratica : TIPI_PRATICA).join('\n');
+    const ta = h('textarea', { rows: 8, spellcheck: 'false' }); ta.value = tipiPratica().join('\n');
     ta.addEventListener('change', () => { db.settings.tipiPratica = ta.value.split('\n').map((x) => x.trim()).filter(Boolean); save(); toast('Elenco salvato'); });
     return h('div', {}, h('h3', {}, 'Tipi di pratica'), h('p', { class: 'note' }, 'Uno per riga: è l’elenco che compare nel campo «Tipo pratica». Nel campo puoi comunque scrivere un tipo nuovo a mano: viene ricordato e proposto la volta dopo.'), ta,
       h('div', { class: 'bar', style: 'margin-top:8px' }, h('button', { type: 'button', onclick: () => { delete db.settings.tipiPratica; save(); route(); toast('Elenco ripristinato'); } }, 'Ripristina predefiniti')));

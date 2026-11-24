@@ -250,7 +250,8 @@
       cols: ['descrizione', 'scadenza', 'stato', 'compenso'],
       isDone: (r) => r.stato === 'Consegnata' || r.stato === 'Chiusa',
       events: (r) => (r.scadenza ? [{ date: r.scadenza, title: 'Pratica ' + r.tipo + (r.cliente ? ' – ' + lab('clienti', r.cliente) : ''), description: r.descrizione }] : []),
-      actions: [{ label: '✓ Consegnata', show: (r) => !['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'Consegnata'; } }],
+      doneLabel: 'Chiuse',
+      actions: [{ label: '✓ Consegnata', show: (r) => !['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'Consegnata'; } }, { label: '↩ Riapri', show: (r) => ['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'In corso'; } }],
     },
     fatture: {
       label: 'Fatture', one: 'fattura', order: { k: 'data', dir: -1 },
@@ -692,7 +693,7 @@
   }
 
   /* ---------- Viste ---------- */
-  const ui = { azf: '', com: '', q: '', showDone: false, per: '', mat: '' };
+  const ui = { azf: '', com: '', q: '', dst: 'aperte', per: '', mat: '' };
   const tile = (l, v, bad) => h('div', { class: 'tile' + (bad ? ' bad' : '') }, h('b', {}, v), h('span', {}, l));
   const tiles = (arr) => h('div', { class: 'tiles' }, arr.map(([l, v, b]) => tile(l, v, b)));
 
@@ -742,7 +743,7 @@
     const fill = () => {
       const nz = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       const toks = nz(ui.q).split(/\s+/).filter(Boolean);
-      let list = rows(ek).filter((r) => ui.showDone || !(ent.isDone && ent.isDone(r)));
+      let list = rows(ek).filter((r) => !ent.isDone || ui.dst === 'tutte' || (ui.dst === 'chiuse') === !!ent.isDone(r));
       if (ek === 'aziende' && ui.com) list = list.filter((r) => (r.comune || '') === ui.com);
       if (toks.length) list = list.filter((r) => { const hay = nz(ent.title(r) + ' ' + ent.fields.map((f) => disp(f, r[f.k])).join(' ')); return toks.every((t) => hay.includes(t)); });
       const { k, dir } = ent.order;
@@ -757,7 +758,9 @@
       h('input', { type: 'search', placeholder: ek === 'aziende' ? 'Cerca per nome o comune…' : 'Cerca in ' + ent.label.toLowerCase() + '…', 'aria-label': 'Cerca', value: ui.q, oninput: (e) => { ui.q = e.target.value; fill(); } }),
       ek === 'aziende' && (() => { const cs = [...new Set(rows('aziende').map((r) => r.comune).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'it')); if (!cs.length) return null;
         const s = h('select', { 'aria-label': 'Filtra per comune', onchange: (e) => { ui.com = e.target.value; fill(); } }, h('option', { value: '' }, 'Tutti i comuni'), cs.map((c) => h('option', { value: c }, c))); s.value = cs.includes(ui.com) ? ui.com : ''; if (s.value !== ui.com) ui.com = s.value; return s; })(),
-      ent.isDone && h('label', {}, h('input', { type: 'checkbox', checked: ui.showDone, onchange: (e) => { ui.showDone = e.target.checked; fill(); } }), 'Mostra completati'),
+      ent.isDone && (() => { const all = rows(ek), nd = all.filter((r) => ent.isDone(r)).length, box = h('div', { class: 'chips', style: 'margin:0' });
+        const drawC = () => box.replaceChildren(...[['aperte', 'Aperte', all.length - nd], ['chiuse', ent.doneLabel || 'Chiuse', nd], ['tutte', 'Tutte', all.length]].map(([k, l, n]) => h('a', { class: 'chip' + (ui.dst === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.dst = k; drawC(); fill(); } }, l + ' · ' + n)));
+        drawC(); return box; })(),
       btn('+ Nuovo', () => openForm(ek), 'pri'));
     fill();
     return h('div', {}, bar, listEl);

@@ -331,3 +331,11 @@ dialog::backdrop{background:rgba(15,25,18,.5);-webkit-backdrop-filter:blur(3px);
 .empty{padding:36px 8px;font-size:15px}
 .az-h{align-items:center}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.sp-prev{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:8px 18px 16px;margin:0 0 12px;box-shadow:var(--sh)}
+.sp-prev h3{margin:10px 0 0}.sp-prev .sp-big{margin:4px 0 2px}.sp-prev .kv{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sp-prev .kv>div{padding:7px 11px;font-variant-numeric:tabular-nums}
+@media(min-width:700px){.sp-prev .kv{grid-template-columns:repeat(5,minmax(0,1fr))}}
+.sp-pvl{display:flex;flex-direction:column;margin:10px 0 4px;border-top:1px solid var(--bd)}
+.sp-pv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 12px;padding:8px 0;border-bottom:1px solid var(--bd);align-items:baseline}
+.sp-pv b{font-variant-numeric:tabular-nums}.sp-pv small{grid-column:1/-1;color:var(--mut)}.sp-pv small.neg{color:var(--warn)}.sp-pv small.pos{color:#2f7d4a}
+.sp-tips{margin:10px 0 6px;padding-left:20px;font-size:14px}.sp-tips li{margin:3px 0}

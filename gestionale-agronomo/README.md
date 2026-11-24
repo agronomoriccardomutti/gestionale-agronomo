@@ -141,3 +141,6 @@ Scuola → *Docenti* (formato “Cognome Nome”, spunta “Dipartimento Scienze
 ## Spese personali
 
 Sezione **Spese**: periodo dal 23 al 22, stipendio, budget settimanale (con quota delle ricorrenti e risparmio da accantonare), spese ricorrenti con tasto “Pagata”, movimenti, categorie. Importa i dati del vecchio “Gestione Spese” da *Importa* (file JSON). Movimenti e ricorrenti restano solo sul dispositivo.
+
+### Previsioni spese
+Nella pagina Spese, card «Previsione di fine periodo»: stima di quanto resterà (o mancherà) al 22, uscite variabili attese per categoria (ritmo del periodo + media degli ultimi 3 periodi), ricorrenti in scadenza, stima del periodo successivo e piccoli consigli. Calcolata sul dispositivo: nessun dato finanziario esce dal telefono. Più storico inserisci, più è precisa.

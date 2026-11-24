@@ -1155,6 +1155,55 @@
     if (top) { const v = Object.entries(vei).filter(([k]) => k.startsWith(top[0] + '|')).sort((a, b) => b[1] - a[1])[0]; return { cat: top[0], vei: v ? v[0].split('|')[1] : '' }; }
     const k = (SP_KW[tipo] || []).find(([, re]) => re.test(q)); return k ? { cat: k[0], vei: '' } : null;
   };
+  /* ---------- Previsioni spese (calcolate sul dispositivo, nessun dato esce) ---------- */
+  const SP_FISSE = ['Rate/Finanziamenti', 'Assicurazione/Bollo', 'Tasse/Imposte'];
+  const spIsFix = (m) => !!m.ricorrenteId || SP_FISSE.includes(m.categoria);
+  function spForecast(key, T) {
+    const tot = spDays(key, spShift(key, 1)), el = Math.min(tot, Math.max(1, spDays(key, T) + 1)), rem = Math.max(0, tot - el), end = spEnd(key);
+    const usc = rows('movimenti').filter((m) => m.tipo === 'Uscita' && m.data);
+    const cur = {}; let fixCur = 0, entr = 0;
+    for (const m of usc) if (spPer(m.data) === key) { const v = +m.importo || 0; if (spIsFix(m)) fixCur += v; else cur[m.categoria || 'Altro'] = (cur[m.categoria || 'Altro'] || 0) + v; }
+    for (const m of rows('movimenti')) if (m.tipo === 'Entrata' && m.data && spPer(m.data) === key) entr += +m.importo || 0;
+    const hist = {}; let nPer = 0, hDays = 0, hVar = 0;
+    for (let i = 1; i <= 8 && nPer < 3; i++) {
+      const k = spShift(key, -i), mm = usc.filter((m) => spPer(m.data) === k && !spIsFix(m)); if (!mm.length) continue;
+      nPer++; hDays += spDays(k, spShift(k, 1)); for (const m of mm) { const v = +m.importo || 0; hist[m.categoria || 'Altro'] = (hist[m.categoria || 'Altro'] || 0) + v; hVar += v; }
+    }
+    const w = Math.min(1, el / tot), w2 = w * w, cats = [];
+    for (const c of new Set([...Object.keys(cur), ...Object.keys(hist)])) {
+      const att = cur[c] || 0, media = nPer ? (hist[c] || 0) / nPer : null, ritmo = att / el * tot;
+      const stima = media === null ? Math.max(att, ritmo) : Math.max(att, (1 - w2) * media + w2 * ritmo);
+      cats.push({ c, att, stima: r2(stima), media: media === null ? null : r2(media) });
+    }
+    cats.sort((a, b) => b.stima - a.stima);
+    const varAtt = Object.values(cur).reduce((a, b) => a + b, 0), varStima = cats.reduce((a, c) => a + c.stima, 0);
+    const ric = rows('ricorrenti'), fixUp = ric.filter((r) => r.prossima && r.prossima <= end).reduce((a, r) => a + (+r.importo || 0), 0);
+    const ent = entr > 0 ? entr : (spLastStip() || 0), risp = +(db.settings && db.settings.accantonare) || 0;
+    const uscite = fixCur + varStima + fixUp, saldo = ent - risp - uscite;
+    const nxt = spShift(key, 1), nxtEnd = spEnd(nxt), fixNext = ric.filter((r) => r.prossima && r.prossima > end && r.prossima <= nxtEnd).reduce((a, r) => a + (+r.importo || 0), 0);
+    const varTipica = nPer ? hVar / nPer : (el ? varAtt / el * tot : 0);
+    const libero = rem > 0 ? (ent - risp - fixCur - fixUp - varAtt) / rem : 0;
+    return { el, rem, tot, cats, varAtt, varStima: r2(varStima), fixCur: r2(fixCur), fixUp: r2(fixUp), uscite: r2(uscite), ent: r2(ent), stimaEnt: entr <= 0, risp, saldo: r2(saldo), nPer, prossimo: r2(varTipica + fixNext), fixNext: r2(fixNext), libero: r2(libero), attendibile: nPer >= 1 ? (el >= 7 ? 'buona' : 'media') : el >= 10 ? 'media' : 'bassa' };
+  }
+  const spPrevCard = (key, T) => {
+    const f = spForecast(key, T), ok = f.saldo >= 0;
+    const rowsC = f.cats.slice(0, 8).map((c) => {
+      const pct = c.media > 0 ? Math.round((c.stima / c.media - 1) * 100) : null, alto = pct !== null && pct > 15 && c.stima - c.media > 10, basso = pct !== null && pct < -15;
+      return h('div', { class: 'sp-pv' }, h('span', {}, c.c), h('b', {}, '~' + L.eur(c.stima)), h('small', { class: alto ? 'neg' : basso ? 'pos' : '' }, c.media === null ? 'nessuno storico' : alto ? '↑ +' + pct + '% sulla media (' + L.eur(c.media) + ')' : basso ? '↓ ' + pct + '% sulla media' : '≈ in linea con la media'));
+    });
+    const fonte = f.nPer ? 'sul ritmo di questo periodo e sulla media degli ultimi ' + f.nPer + ' period' + (f.nPer === 1 ? 'o' : 'i') : 'solo sul ritmo di questo periodo (manca lo storico)';
+    const consigli = [];
+    if (f.rem > 0) consigli.push(f.libero > 0 ? 'Per chiudere in pari puoi spendere ancora circa ' + L.eur(f.libero) + ' al giorno in spese variabili.' : 'Per chiudere in pari dovresti ridurre le spese variabili: il margine è già esaurito.');
+    const sopra = f.cats.find((c) => c.media > 0 && c.stima - c.media > 10 && c.stima / c.media > 1.15); if (sopra) consigli.push('Occhio a «' + sopra.c + '»: va verso ' + L.eur(sopra.stima) + ', di solito ' + L.eur(sopra.media) + '.');
+    if (f.fixUp > 0) consigli.push('Ricorrenti ancora in scadenza nel periodo: ' + L.eur(f.fixUp) + '.');
+    return h('div', { class: 'sp-prev' }, h('h3', {}, '🔮 Previsione di fine periodo'),
+      h('div', { class: 'sp-big' + (ok ? '' : ' neg') }, (ok ? '+' : '−') + L.eur(Math.abs(f.saldo))),
+      h('p', { class: 'note' }, (ok ? 'Avanzo previsto' : 'Sforamento previsto') + ' al ' + spBrev(spEnd(key)) + ', dopo il risparmio di ' + L.eur(f.risp) + (f.stimaEnt ? ' (entrate stimate sull’ultimo stipendio)' : '') + '.'),
+      h('div', { class: 'kv' }, [['Uscite previste', L.eur(f.uscite)], ['Già speso', L.eur(f.fixCur + f.varAtt)], ['Variabili ancora attese', L.eur(Math.max(0, f.varStima - f.varAtt))], ['Ricorrenti in scadenza', L.eur(f.fixUp)], ['Prossimo periodo (stima)', L.eur(f.prossimo)]].map(([l, v]) => h('div', {}, h('small', {}, l), v))),
+      f.cats.length ? h('div', { class: 'sp-pvl' }, rowsC) : null,
+      consigli.length ? h('ul', { class: 'sp-tips' }, consigli.map((x) => h('li', {}, x))) : null,
+      h('p', { class: 'note' }, 'Attendibilità ' + f.attendibile + ': stima basata ' + fonte + '. Calcolata sul telefono, nessun dato esce dal dispositivo.'));
+  };
   const spAddM = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(y, m - 1 + n, 1), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(Math.min(d, last)); };
   function spTot(key) {
     const t = { entrate: 0, uscite: 0, stip: false, cat: {} };
@@ -1239,6 +1288,7 @@
     acc.addEventListener('input', () => { db.settings.accantonare = +String(acc.value).replace(',', '.') || 0; save(); drawWeek(); });
     wk.append(h('h3', {}, isCur ? 'Quanto puoi spendere alla settimana' : 'Quanto hai speso in media a settimana'), wOut, isCur && h('div', { class: 'fld' }, h('label', {}, 'Risparmio da mettere da parte nel periodo €'), acc));
     drawWeek(); body.append(wk);
+    if (isCur) body.append(spPrevCard(key, T));
     // ricorrenti
     const ric = rows('ricorrenti').slice().sort((x, y) => (x.prossima || '9').localeCompare(y.prossima || '9'));
     const mese = ric.reduce((s, r) => s + (+r.importo || 0) / (+r.mesi || 1), 0);

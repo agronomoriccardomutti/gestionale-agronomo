@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -39,6 +39,15 @@
   /* campi che «imparano»: un valore nuovo scritto a mano viene ricordato e proposto la volta dopo */
   const learnedOf = (ek, k) => { const l = db.settings && db.settings.learned && db.settings.learned[ek + '.' + k]; return Array.isArray(l) ? l : []; };
   const learn = (ek, k, v) => { const f = fieldOf(ENT[ek], k), known = new Set([...(f.list || (f.listFn && f.listFn()) || []), ...learnedOf(ek, k)].map((x) => String(x).toLowerCase())); if (known.has(String(v).toLowerCase())) return; db.settings.learned = db.settings.learned || {}; db.settings.learned[ek + '.' + k] = [...learnedOf(ek, k), v]; };
+  const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti'];
+  const pratEco = (p) => {
+    const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
+    const compenso = +p.compenso || 0, speseR = sum('spesePratica', (x) => x.rimborsabile), speseC = sum('spesePratica', (x) => !x.rimborsabile), incassato = sum('pagamenti');
+    const dovuto = r2(compenso + speseR);
+    return { compenso, speseR: r2(speseR), speseC: r2(speseC), dovuto, incassato: r2(incassato), residuo: r2(dovuto - incassato) };
+  };
+  const linkOf = (u) => { u = String(u || '').trim(); return !u ? '' : /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u; };
+  const provider = (u) => { u = String(u || '').toLowerCase(); return /drive\.google|docs\.google/.test(u) ? 'Google Drive' : /icloud/.test(u) ? 'iCloud' : /dropbox/.test(u) ? 'Dropbox' : /onedrive|sharepoint|1drv/.test(u) ? 'OneDrive' : /^https?:|^[a-z0-9.-]+\.[a-z]{2,}/.test(u) ? 'Link' : ''; };
   const STATI_PRATICA = ['Da avviare', 'In corso', 'In attesa', 'Consegnata', 'Chiusa'];
   const lab = (ek, id) => { const r = id && rows(ek).find((x) => x.id === id); return r ? ENT[ek].title(r) : ''; };
   const prodottiMagazzino = () => rows('magazzino').map((r) => r.prodotto).filter(Boolean);
@@ -247,11 +256,59 @@
         { k: 'compenso', l: 'Compenso (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.tipo || 'Pratica') + (r.cliente ? ' – ' + lab('clienti', r.cliente) : ''),
-      cols: ['descrizione', 'scadenza', 'stato', 'compenso'],
+      cols: ['descrizione', 'scadenza', 'compenso'], statoPill: { k: 'stato', opts: STATI_PRATICA },
       isDone: (r) => r.stato === 'Consegnata' || r.stato === 'Chiusa',
       events: (r) => (r.scadenza ? [{ date: r.scadenza, title: 'Pratica ' + r.tipo + (r.cliente ? ' – ' + lab('clienti', r.cliente) : ''), description: r.descrizione }] : []),
       doneLabel: 'Chiuse',
+      detail: (r) => '#/professione/pratica/' + r.id,
+      extra: (r) => { const e = pratEco(r); return e.dovuto > 0 ? ['Incassato ' + L.eur(e.incassato) + ' su ' + L.eur(e.dovuto)] : []; },
+      deleteWarn: 'Eliminare la pratica con pagamenti, spese, preventivi e documenti collegati?',
+      onDelete: (r) => { for (const k of PRAT_FIGLI) { rows(k).filter((x) => x.pratica === r.id).forEach((x) => tombstone(k, x.id)); db.data[k] = rows(k).filter((x) => x.pratica !== r.id); } },
       actions: [{ label: '✓ Consegnata', show: (r) => !['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'Consegnata'; } }, { label: '↩ Riapri', show: (r) => ['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'In corso'; } }],
+    },
+    pagamenti: {
+      label: 'Pagamenti pratica', one: 'pagamento', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'pratica', l: 'Pratica', t: 'ref', to: 'pratiche' },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Acconto', 'Pagamento parziale', 'Saldo', 'Rimborso spese'], def: 'Acconto' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'metodo', l: 'Metodo', t: 'select', opts: ['Bonifico', 'Contanti', 'Carta', 'Assegno'] },
+        { k: 'nota', l: 'Nota', t: 'text' }],
+      title: (r) => (r.tipo || 'Pagamento') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo'],
+    },
+    spesePratica: {
+      label: 'Spese pratica', one: 'spesa della pratica', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'pratica', l: 'Pratica', t: 'ref', to: 'pratiche' },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'descrizione', l: 'Descrizione (es. marche da bollo, visure, trasferta)', t: 'text' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'rimborsabile', l: 'Da rimborsare dal cliente', t: 'checkbox', def: true },
+        { k: 'nota', l: 'Nota', t: 'text' }],
+      title: (r) => (r.descrizione || 'Spesa') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo'],
+    },
+    preventivi: {
+      label: 'Preventivi', one: 'preventivo', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'pratica', l: 'Pratica', t: 'ref', to: 'pratiche' },
+        { k: 'numero', l: 'Numero / titolo', t: 'text' },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'stato', l: 'Stato', t: 'select', opts: ['Bozza', 'Inviato', 'Accettato', 'Rifiutato'], def: 'Bozza' },
+        { k: 'url', l: 'Link al file (cloud)', t: 'text' },
+        { k: 'nota', l: 'Nota', t: 'textarea' }],
+      title: (r) => 'Preventivo ' + (r.numero || '') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo', 'stato'],
+    },
+    documenti: {
+      label: 'Documenti e cartelle', one: 'documento / cartella', order: { k: 'titolo', dir: 1 },
+      fields: [
+        { k: 'pratica', l: 'Pratica', t: 'ref', to: 'pratiche' },
+        { k: 'titolo', l: 'Titolo', t: 'text' },
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Cartella cloud', 'Incarico / contratto', 'Documento', 'Fattura', 'Altro'], def: 'Cartella cloud' },
+        { k: 'url', l: 'Link (Drive, iCloud, Dropbox, OneDrive…)', t: 'text' },
+        { k: 'nota', l: 'Nota', t: 'text' }],
+      title: (r) => (r.titolo || 'Documento') + ' – ' + lab('pratiche', r.pratica), cols: ['tipo', 'url'],
     },
     fatture: {
       label: 'Fatture', one: 'fattura', order: { k: 'data', dir: -1 },
@@ -622,7 +679,7 @@
     st.p20 = r2(st.tot * 0.2); st.epap = p.epap ? r2(st.imp * 0.04) : 0; st.accant = st.rimb;
     return st;
   }
-  const CL = { Programmata: 'info', Svolta: 'ok', 'Verbale da consegnare': 'warn', Chiusa: 'ok', 'Da registrare': 'info', Registrato: 'warn', Pagato: 'ok' };
+  const CL = { 'In corso': 'info', 'In attesa': 'warn', Consegnata: 'ok', Programmata: 'info', Svolta: 'ok', 'Verbale da consegnare': 'warn', Chiusa: 'ok', 'Da registrare': 'info', Registrato: 'warn', Pagato: 'ok' };
   const pillSel = (opts, val, onch, label) => {
     const el = h('select', { class: 'pill', 'aria-label': label, onchange: (e) => { el.dataset.c = CL[e.target.value] || ''; onch(e.target.value); } }, opts.map((o) => h('option', { value: o }, o)));
     el.value = val; el.dataset.c = CL[val] || ''; return el;
@@ -723,7 +780,7 @@
     const next = !done && evs.filter((e) => !e.info || e.date >= L.today()).sort(cmpEv)[0];
     return h('article', { class: 'card' + (done ? ' done' : ''), tabindex: '0', onclick: () => open1(ek, r),
       onkeydown: (e) => { if (e.key === 'Enter') open1(ek, r); } },
-    h('div', { class: 'card-t' }, ent.title(r) || '(senza titolo)'),
+    h('div', { class: 'card-t' + (ent.statoPill ? ' card-tp' : '') }, h('span', {}, ent.title(r) || '(senza titolo)'), ent.statoPill && (() => { const sp = ent.statoPill, el = pillSel(sp.opts, r[sp.k] || sp.opts[0], (v) => { r[sp.k] = v; r.updated = NOW(); save(); route(); }, 'Stato'); el.addEventListener('click', (ev) => ev.stopPropagation()); el.addEventListener('keydown', (ev) => ev.stopPropagation()); return el; })()),
     h('div', { class: 'card-m' }, meta.join(' · ')),
     h('div', { class: 'card-a' },
       next && relBadge(next.date),
@@ -1741,6 +1798,49 @@
     dlg.showModal();
   }
 
+  /* ---------- Scheda pratica: economia (compenso, acconti, spese, saldo), preventivi, documenti e cartelle cloud ---------- */
+  function viewPratica(id) {
+    const p = byId('pratiche', id);
+    if (!p) return h('div', { class: 'empty' }, 'Pratica non trovata.');
+    const T = L.today(), cl = p.cliente && byId('clienti', p.cliente), done = ['Consegnata', 'Chiusa'].includes(p.stato), e = pratEco(p);
+    const mine = (ek) => rows(ek).filter((x) => x.pratica === id);
+    const PCL = { 'In corso': 'info', 'In attesa': 'warn', Consegnata: 'ok', Chiusa: 'ok' };
+    const sec = (title, n, buttons, content) => h('section', { class: 'pr-sec' }, h('div', { class: 'az-h' }, h('h3', {}, title, h('span', { class: 'az-n' }, n)), h('div', { class: 'bar' }, buttons)), content);
+    const rowOf = (ek, x, date, main, sub, amount, extra) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm(ek, x), onkeydown: (ev) => { if (ev.key === 'Enter') openForm(ek, x); } },
+      h('span', { class: 'date' }, date ? L.fmtDate(date) : '—'), h('span', { class: 't' }, main, sub ? h('div', { class: 'note' }, sub) : null, extra || null), amount != null ? h('b', {}, L.eur(+amount || 0)) : null);
+    const byData = (a, b) => (b.data || '').localeCompare(a.data || '');
+    const pag = mine('pagamenti').sort(byData), spe = mine('spesePratica').sort(byData), prev = mine('preventivi').sort(byData), doc = mine('documenti');
+    const prePag = (tipo, imp) => openForm('pagamenti', null, { pratica: id, tipo, importo: imp > 0 ? imp : undefined });
+    const pct = e.dovuto > 0 ? Math.min(100, e.incassato / e.dovuto * 100) : 0;
+    const pagList = pag.length ? h('div', {}, pag.map((x) => rowOf('pagamenti', x, x.data, x.tipo || 'Pagamento', [x.metodo, x.nota].filter(Boolean).join(' · '), x.importo))) : h('p', { class: 'note' }, 'Nessun pagamento registrato.');
+    const speList = spe.length ? h('div', {}, spe.map((x) => rowOf('spesePratica', x, x.data, x.descrizione || 'Spesa', [x.rimborsabile ? 'da rimborsare dal cliente' : 'a tuo carico', x.nota].filter(Boolean).join(' · '), x.importo))) : h('p', { class: 'note' }, 'Nessuna spesa registrata (bolli, visure, trasferte…).');
+    const preList = prev.length ? h('div', {}, prev.map((x) => rowOf('preventivi', x, x.data, (x.numero || 'Preventivo') + '  ', x.nota, x.importo, h('div', { class: 'pr-act' }, tag(x.stato || 'Bozza', { Accettato: 'ok', Inviato: 'info', Rifiutato: 'warn' }[x.stato] || ''),
+      x.url && h('a', { class: 'btnlink', href: linkOf(x.url), target: '_blank', rel: 'noopener', onclick: (ev) => ev.stopPropagation() }, '📄 Apri'),
+      x.stato === 'Accettato' && +x.importo > 0 && +p.compenso !== +x.importo && btn('Usa come compenso', (ev) => { ev.stopPropagation(); p.compenso = +x.importo; p.updated = NOW(); save(); route(); toast('Compenso aggiornato'); }, 'sm'))))) : h('p', { class: 'note' }, 'Nessun preventivo.');
+    const docList = doc.length ? h('div', {}, doc.map((x) => h('div', { class: 'row', tabindex: '0', onclick: () => (x.url ? window.open(linkOf(x.url), '_blank', 'noopener') : openForm('documenti', x)) },
+      h('span', { class: 'date' }, x.tipo === 'Cartella cloud' ? '📁' : '📄'), h('span', { class: 't' }, x.titolo || x.tipo || 'Documento', h('div', { class: 'note' }, [x.tipo, provider(x.url), x.nota].filter(Boolean).join(' · '))),
+      btn('✏️', (ev) => { ev.stopPropagation(); openForm('documenti', x); }, 'sm')))) : h('p', { class: 'note' }, 'Collega la cartella della pratica sul cloud (Drive, iCloud, Dropbox…) e i documenti importanti.');
+    const line = (ico, l, v, href) => v ? h('div', { class: 'az-l' }, h('span', { class: 'az-i' }, ico), h('div', {}, h('small', {}, l), href ? h('a', { href: href + v }, v) : h('span', {}, v))) : null;
+    const side = (title, content) => h('section', { class: 'az-side' }, h('div', { class: 'az-h' }, h('h3', {}, title)), content);
+    const cli = cl ? [line('👤', 'Cliente', ENT.clienti.title(cl)), line('✉️', 'Email', cl.email, 'mailto:'), line('📱', 'Telefono', cl.telefono, 'tel:')].filter(Boolean) : [];
+    const dati = [line('📅', 'Scadenza', p.scadenza ? L.fmtDate(p.scadenza) : ''), line('📝', 'Descrizione', p.descrizione), line('📬', 'Cartella cloud', (doc.find((x) => x.tipo === 'Cartella cloud') || {}).titolo)].filter(Boolean);
+    return h('div', { class: 'az pr' }, h('p', {}, h('a', { href: '#/professione/pratiche' }, '← Pratiche')),
+      h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '📁 ' + (p.tipo || 'Pratica')), h('div', { class: 'vtags' }, tag(p.stato || 'Da avviare', PCL[p.stato] || ''), cl && h('span', { class: 'pill' }, ENT.clienti.title(cl)), p.scadenza && tag('scade ' + L.fmtDate(p.scadenza), !done && p.scadenza < T ? 'warn' : ''))),
+        h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('pratiche', p), ''))),
+      h('div', { class: 'bar az-act' }, done ? btn('↩ Riapri', () => { p.stato = 'In corso'; p.updated = NOW(); save(); route(); }, '') : btn('✓ Consegnata', () => { p.stato = 'Consegnata'; p.updated = NOW(); save(); route(); }, 'pri'),
+        btn('🧾 Crea fattura', () => openForm('fatture', null, { cliente: p.cliente || undefined, importo: e.residuo > 0 ? e.residuo : undefined, descrizione: p.tipo }), ''),
+        cl && cl.email && h('a', { class: 'btnlink', href: gmailCompose(cl.email, p.tipo || ''), target: '_blank', rel: 'noopener' }, '✉️ Scrivi (Gmail)')),
+      tiles([['Compenso', L.eur(e.compenso)], ['Spese da rimborsare', L.eur(e.speseR)], ['Incassato', L.eur(e.incassato)], ['Residuo', L.eur(e.residuo), e.residuo > 0 && done]]),
+      e.dovuto > 0 ? h('div', {}, h('div', { class: 'sp-bar' }, h('i', { style: 'width:' + pct + '%' })), h('p', { class: 'note' }, 'Dovuto ' + L.eur(e.dovuto) + ' (compenso + spese da rimborsare) · incassato ' + Math.round(pct) + '%' + (e.speseC ? ' · spese a tuo carico ' + L.eur(e.speseC) : '') + (e.residuo < 0 ? ' · incassato oltre il dovuto di ' + L.eur(-e.residuo) : ''))) : h('p', { class: 'note' }, 'Inserisci il compenso da «Modifica» (o accetta un preventivo) per vedere il residuo.'),
+      h('div', { class: 'az-cols' },
+        h('div', { class: 'az-main' },
+          sec('Pagamenti', pag.length, [btn('+ Acconto', () => prePag('Acconto'), ''), btn('+ Parziale', () => prePag('Pagamento parziale'), ''), btn('+ Saldo', () => prePag('Saldo', e.residuo), 'pri')], pagList),
+          sec('Spese', spe.length, btn('+ Spesa', () => openForm('spesePratica', null, { pratica: id }), ''), speList),
+          sec('Preventivi', prev.length, btn('+ Preventivo', () => openForm('preventivi', null, { pratica: id }), ''), preList),
+          sec('Documenti e cartelle cloud', doc.length, [btn('📁 Collega cartella', () => openForm('documenti', null, { pratica: id, tipo: 'Cartella cloud' }), 'pri'), btn('+ Documento', () => openForm('documenti', null, { pratica: id, tipo: 'Documento' }), '')], docList)),
+        h('aside', { class: 'az-aside' }, cli.length ? side('Cliente', h('div', { class: 'az-card' }, cli)) : null, dati.length ? side('Dati pratica', h('div', { class: 'az-card' }, dati)) : null, p.note ? side('Note', h('p', { class: 'az-note' }, p.note)) : null)));
+  }
+
   function viewAzienda(id) {
     const a = byId('aziende', id);
     if (!a) return h('div', { class: 'empty' }, 'Azienda non trovata.');
@@ -2025,7 +2125,7 @@
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
       : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && ek === 'stipendio' ? ((() => { const [i, d] = String(arg || '').split('_'); history.replaceState(null, '', '#/spese'); setTimeout(() => openStipendioConferma(+i || '', d || ''), 50); })(), viewSpese()) : mod.id === 'spese' && !ek ? viewSpese() : mod.id === 'ispezioni' && ek === 'mappa' ? viewMappa()
-      : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
+      : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : mod.id === 'professione' && ek === 'pratica' ? viewPratica(arg) : viewModule(mod, ek));
     fitTables(app);
   }
   // tabelle adattive: a tutta larghezza; su schermi stretti ogni riga diventa una scheda con le etichette delle colonne

@@ -147,3 +147,6 @@ Nella pagina Spese, card «Previsione di fine periodo»: stima di quanto rester�
 
 ### Mail dei clienti (Gmail)
 Opzionale. In Impostazioni › «Mail dei clienti» si incolla l'ID client OAuth Google (istruzioni nella pagina) e si preme «Collega Gmail». Sulle schede dei clienti con email compaiono il pulsante «📬 Mail» (ultime conversazioni) e il numero di mail non lette. Permesso di sola lettura (`gmail.readonly`); il token resta nella sessione del browser (circa 1 ora), le mail non vengono salvate né sincronizzate.
+
+### Scheda pratica
+Toccando una pratica si apre la sua scheda: compenso, spese da rimborsare, incassato e residuo; **pagamenti** (acconti, parziali, saldo), **spese** (da rimborsare o a tuo carico), **preventivi** (con «Usa come compenso» sull'accettato), **documenti e cartelle cloud** (link a Drive/iCloud/Dropbox/OneDrive) e «Crea fattura» con il residuo. Lo stato è un menu colorato direttamente sulla lista. Importi di pagamenti, spese e preventivi restano solo sul dispositivo (`localOnly`), come le fatture.

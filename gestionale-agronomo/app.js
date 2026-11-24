@@ -276,6 +276,7 @@
         { k: 'metodo', l: 'Metodo', t: 'select', opts: ['Bonifico', 'Contanti', 'Carta', 'Assegno'] },
         { k: 'nota', l: 'Nota', t: 'text' }],
       title: (r) => (r.tipo || 'Pagamento') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo'],
+      dlg: { name: (r) => (r.tipo || 'pagamento').toLowerCase(), hide: ['pratica'], chips: ['tipo', 'metodo'], rows: [['importo', 'data']], focus: 'importo' },
     },
     spesePratica: {
       label: 'Spese pratica', one: 'spesa della pratica', order: { k: 'data', dir: -1 },
@@ -287,6 +288,7 @@
         { k: 'rimborsabile', l: 'Da rimborsare dal cliente', t: 'checkbox', def: true },
         { k: 'nota', l: 'Nota', t: 'text' }],
       title: (r) => (r.descrizione || 'Spesa') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo'],
+      dlg: { name: () => 'spesa', hide: ['pratica'], rows: [['importo', 'data']], focus: 'descrizione' },
     },
     preventivi: {
       label: 'Preventivi', one: 'preventivo', order: { k: 'data', dir: -1 },
@@ -299,6 +301,7 @@
         { k: 'url', l: 'Link al file (cloud)', t: 'text' },
         { k: 'nota', l: 'Nota', t: 'textarea' }],
       title: (r) => 'Preventivo ' + (r.numero || '') + ' – ' + lab('pratiche', r.pratica), cols: ['data', 'importo', 'stato'],
+      dlg: { name: () => 'preventivo', hide: ['pratica'], chips: ['stato'], rows: [['numero', 'data'], ['importo', 'stato']], focus: 'numero' },
     },
     documenti: {
       label: 'Documenti e cartelle', one: 'documento / cartella', order: { k: 'titolo', dir: 1 },
@@ -309,6 +312,7 @@
         { k: 'url', l: 'Link (Drive, iCloud, Dropbox, OneDrive…)', t: 'text' },
         { k: 'nota', l: 'Nota', t: 'text' }],
       title: (r) => (r.titolo || 'Documento') + ' – ' + lab('pratiche', r.pratica), cols: ['tipo', 'url'],
+      dlg: { name: (r) => (r.tipo === 'Cartella cloud' ? 'cartella cloud' : 'documento'), hide: ['pratica'], chips: ['tipo'], focus: 'titolo' },
     },
     denunce: {
       label: 'Denunce apistiche', one: 'denuncia', order: { k: 'anno', dir: 1 },
@@ -317,9 +321,10 @@
         { k: 'anno', l: 'Anno', t: 'number', step: '1' },
         { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', fmt: 'eur', def: 40 },
         { k: 'pagato', l: 'Pagato', t: 'checkbox' },
-        { k: 'dataAgg', l: 'Data aggiornamento', t: 'date', def: 'today' },
+        { k: 'dataAgg', l: 'Data aggiornamento', t: 'date', hint: 'Facoltativa: puoi inserirla in un secondo momento.' },
         { k: 'nota', l: 'Note pagamento', t: 'text' }],
       title: (r) => 'Denuncia ' + (r.anno || '') + ' – ' + lab('pratiche', r.pratica), cols: ['anno', 'importo'],
+      dlg: { name: () => 'denuncia', hide: ['pratica'], rows: [['anno', 'importo'], ['dataAgg', 'pagato']], focus: 'anno' },
     },
     fatture: {
       label: 'Fatture', one: 'fattura', order: { k: 'data', dir: -1 },
@@ -594,7 +599,9 @@
     if (isNew) for (const f of ent.fields) if (r[f.k] == null && f.def != null) r[f.k] = f.def === 'today' ? L.today() : f.def;
     const dlg = document.getElementById('dlg'); dlg.replaceChildren();
     const inputs = {};
-    const form = h('form', { class: 'dlg-in', method: 'dialog' }, h('h2', {}, (isNew ? 'Nuovo: ' : 'Modifica: ') + ent.one));
+    const D = ent.dlg || null, wrap = {};
+    const form = h('form', { class: 'dlg-in' + (D ? ' dlg-c' : ''), method: 'dialog' }, h('h2', {}, D ? (isNew ? 'Nuovo ' : 'Modifica ') + D.name(r) : (isNew ? 'Nuovo: ' : 'Modifica: ') + ent.one),
+      D && r.pratica && byId('pratiche', r.pratica) ? h('p', { class: 'dlg-ctx' }, '📁 ' + ENT.pratiche.title(byId('pratiche', r.pratica))) : null);
     for (const f of ent.fields) {
       let el;
       const val = r[f.k];
@@ -628,8 +635,17 @@
         }
       }
       inputs[f.k] = el;
-      form.append(h('div', { class: 'fld' }, h('label', { for: 'f-' + f.k }, f.l + (f.req ? ' *' : '')), (el.id = 'f-' + f.k, el)));
+      if (D && D.hide && D.hide.includes(f.k) && r[f.k]) { el.hidden = true; form.append(el); continue; }
+      let ctl = el;
+      if (D && D.chips && D.chips.includes(f.k) && f.t === 'select') {
+        el.hidden = true; const box = h('div', { class: 'chips dlg-chips' }), drawC = () => box.replaceChildren(...f.opts.map((o) => h('button', { type: 'button', class: 'chip' + (el.value === o ? ' on' : ''), onclick: () => { el.value = el.value === o && !f.req ? '' : o; drawC(); } }, o)));
+        drawC(); ctl = h('div', {}, el, box);
+      } else if (f.fmt === 'eur') ctl = h('div', { class: 'money' }, h('span', {}, '€'), el);
+      else if (f.t === 'checkbox') ctl = h('label', { class: 'api-sw' }, el, h('span', {}, f.l));
+      const fl = h('div', { class: 'fld' + (f.t === 'checkbox' ? ' chk' : '') }, f.t === 'checkbox' ? null : h('label', { for: 'f-' + f.k }, f.l + (f.req ? ' *' : '')), (el.id = 'f-' + f.k, ctl), f.hint ? h('small', {}, f.hint) : null);
+      wrap[f.k] = fl; form.append(fl);
     }
+    if (D && D.rows) for (const pair of D.rows) { const ws = pair.map((k) => wrap[k]).filter(Boolean); if (ws.length === 2) { const row = h('div', { class: 'fld-row' }); ws[0].before(row); row.append(...ws); } }
     const close = () => dlg.close();
     form.append(h('div', { class: 'dlg-btns' },
       !isNew && h('button', { type: 'button', class: 'del', onclick: () => {
@@ -653,6 +669,7 @@
       save(); close(); route(); toast('Salvato');
     });
     dlg.append(form); dlg.showModal();
+    if (D && D.focus && inputs[D.focus] && isNew) setTimeout(() => { try { inputs[D.focus].focus(); } catch (e) { /* niente */ } }, 30);
   }
 
   function showText(title, text, note) {
@@ -1840,8 +1857,8 @@
       const tbl = den.length ? h('table', { class: 'g' }, h('thead', {}, h('tr', {}, ['Anno', 'Importo', 'Pagato?', 'Data aggiornamento', 'Note pagamento'].map((c) => h('th', {}, c)))),
         h('tbody', {}, den.map((x) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('denunce', x) },
           h('td', {}, String(x.anno || '')), h('td', {}, L.eur(+x.importo || 0)),
-          h('td', {}, h('button', { type: 'button', class: 'apy ' + (x.pagato ? 'si' : 'no'), title: 'Tocca per cambiare', onclick: (ev) => { ev.stopPropagation(); x.pagato = !x.pagato; x.dataAgg = L.today(); x.updated = NOW(); save(); route(); } }, h('i', {}, x.pagato ? '✓' : '✕'), x.pagato ? 'Sì' : 'No')),
-          h('td', {}, x.dataAgg ? L.fmtDate(x.dataAgg) : ''), h('td', {}, x.nota || ''))))) : h('p', { class: 'note' }, 'Nessuna denuncia registrata: usa «+ Nuova denuncia» per aggiungere l’anno.');
+          h('td', {}, h('button', { type: 'button', class: 'apy ' + (x.pagato ? 'si' : 'no'), title: 'Tocca per cambiare', onclick: (ev) => { ev.stopPropagation(); x.pagato = !x.pagato; x.updated = NOW(); save(); route(); } }, h('i', {}, x.pagato ? '✓' : '✕'), x.pagato ? 'Sì' : 'No')),
+          h('td', {}, h('input', { type: 'date', class: 'api-d', value: x.dataAgg || '', 'aria-label': 'Data aggiornamento ' + x.anno, onclick: (ev) => ev.stopPropagation(), onchange: (ev) => { x.dataAgg = ev.target.value; x.updated = NOW(); save(); } })), h('td', {}, x.nota || ''))))) : h('p', { class: 'note' }, 'Nessuna denuncia registrata: usa «+ Nuova denuncia» per aggiungere l’anno.');
       return h('section', { class: 'pr-sec api' }, h('div', { class: 'az-h' }, h('h3', {}, 'Anagrafe apistica', h('span', { class: 'az-n' }, den.length)), h('div', { class: 'bar' }, btn('+ Nuova denuncia', () => openForm('denunce', null, { pratica: id, anno: ultimo ? (+ultimo.anno || new Date().getFullYear()) + 1 : new Date().getFullYear(), importo: ultimo ? ultimo.importo : 40 }), 'pri'))),
         h('div', { class: 'api-top' }, inp('apDenominazione', 'Denominazione', cl ? ENT.clienti.title(cl) : '', p.apDenominazione || (cl ? [cl.cognome, cl.nome].filter(Boolean).join(' ') : '')), inp('apCodice', 'Codice apistico', '123AL023', p.apCodice || '')),
         h('h3', { class: 'api-h' }, 'Archivio denunce'), tbl,

@@ -1171,7 +1171,7 @@
     }
     const w = Math.min(1, el / tot), w2 = w * w, cats = [];
     for (const c of new Set([...Object.keys(cur), ...Object.keys(hist)])) {
-      const att = cur[c] || 0, media = nPer ? (hist[c] || 0) / nPer : null, ritmo = att / el * tot;
+      const att = cur[c] || 0, media = nPer ? (hist[c] || 0) / nPer : null, ritmo = att / Math.max(el, 10) * tot;
       const stima = media === null ? Math.max(att, ritmo) : Math.max(att, (1 - w2) * media + w2 * ritmo);
       cats.push({ c, att, stima: r2(stima), media: media === null ? null : r2(media) });
     }
@@ -1181,7 +1181,7 @@
     const ent = entr > 0 ? entr : (spLastStip() || 0), risp = +(db.settings && db.settings.accantonare) || 0;
     const uscite = fixCur + varStima + fixUp, saldo = ent - risp - uscite;
     const nxt = spShift(key, 1), nxtEnd = spEnd(nxt), fixNext = ric.filter((r) => r.prossima && r.prossima > end && r.prossima <= nxtEnd).reduce((a, r) => a + (+r.importo || 0), 0);
-    const varTipica = nPer ? hVar / nPer : (el ? varAtt / el * tot : 0);
+    const varTipica = nPer ? hVar / nPer : (varAtt / Math.max(el, 10) * tot);
     const libero = rem > 0 ? (ent - risp - fixCur - fixUp - varAtt) / rem : 0;
     return { el, rem, tot, cats, varAtt, varStima: r2(varStima), fixCur: r2(fixCur), fixUp: r2(fixUp), uscite: r2(uscite), ent: r2(ent), stimaEnt: entr <= 0, risp, saldo: r2(saldo), nPer, prossimo: r2(varTipica + fixNext), fixNext: r2(fixNext), libero: r2(libero), attendibile: nPer >= 1 ? (el >= 7 ? 'buona' : 'media') : el >= 10 ? 'media' : 'bassa' };
   }

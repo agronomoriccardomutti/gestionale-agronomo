@@ -1265,11 +1265,11 @@
         if (vei && !veiFld.hidden) vei.value = g.vei || (g.cat === 'Carburante' && !vei.value ? 'Nissan' : vei.value);
       });
     }
-    body.append(h('h3', {}, 'Aggiungi movimento'), seg, h('div', { class: 'sp-form' }, fl('Data', dt), fl('Importo €', im), fl('Descrizione', ds, 'w2'), catSel && fl('Categoria', catSel), veiFld, met && fl('Pagamento', met)),
+    body.append(h('h3', {}, 'Aggiungi movimento'), h('div', { class: 'sp-card' }, seg, h('div', { class: 'sp-form' }, fl('Data', dt), fl('Importo €', im), fl('Descrizione', ds, 'w2'), catSel && fl('Categoria', catSel), veiFld, met && fl('Pagamento', met)),
       h('div', { class: 'bar' }, btn('Aggiungi', () => {
         const v = +String(im.value).replace(',', '.'); if (!dt.value || !ds.value.trim() || !(v > 0)) return toast('Servono data, descrizione e importo');
         mov.push({ id: uid(), tipo: SP.tipo, data: dt.value, importo: r2(v), descrizione: ds.value.trim(), categoria: SP.tipo === 'Prelievo' ? 'Prelievo contanti' : catSel.value, metodo: SP.tipo === 'Prelievo' ? 'Contanti' : met.value, veicolo: veiFld && !veiFld.hidden ? vei.value : '', updated: NOW() });
-        save(); if (spPer(dt.value) !== SP.per) SP.per = spPer(dt.value); route(); toast('Aggiunto'); }, 'pri')));
+        save(); if (spPer(dt.value) !== SP.per) SP.per = spPer(dt.value); route(); toast('Aggiunto'); }, 'pri'))));
     // categorie
     const cats = Object.entries(t.cat).sort((x, y) => y[1] - x[1]), mx = cats.length ? cats[0][1] : 1;
     body.append(h('h3', {}, 'Uscite per categoria'), cats.length ? h('div', { class: 'sp-cats' }, cats.map(([c, v]) => h('div', { class: 'sp-cat' }, h('span', {}, c), h('div', { class: 'sp-tr' }, h('i', { style: 'width:' + (v / mx * 100) + '%' })), h('b', {}, L.eur(v))))) : h('p', { class: 'note' }, 'Nessuna uscita in questo periodo.'));

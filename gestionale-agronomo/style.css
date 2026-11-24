@@ -269,3 +269,23 @@ tr.abs td.nm{opacity:1}
 
 .azmap{height:60vh;min-height:320px;border:1px solid var(--bd);border-radius:12px;margin:8px 0 14px;z-index:0}
 .azpop-b{display:flex;gap:10px;margin-top:6px}.azpop-b a{font-weight:600}
+
+/* Spese: rifinitura grafica */
+.sp h3{margin:24px 0 10px}
+.sp-top{flex-direction:column;align-items:stretch;gap:10px;margin-bottom:14px}
+.sp-per{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:8px 10px;justify-content:space-between}
+.sp-pl{flex:1;min-width:0}.sp-pl b{font-size:17px}.sp-pl small{font-size:12.5px}
+.sp-top>.bar{display:flex;gap:8px;flex-wrap:wrap}.sp-top>.bar>*{flex:1 1 auto;text-align:center;justify-content:center}
+.sp .tiles{gap:10px}.sp .tile{padding:12px 14px}.sp .tile b{font-size:22px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}.sp .tile span{display:block;margin-top:2px;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+.sp .tiles .tile:nth-child(1) b{color:#2f7d4a}.sp .tiles .tile:nth-child(3){border-color:var(--pri);border-width:2px}.sp .tiles .tile:nth-child(3) b{color:var(--pri)}.sp .tiles .tile.bad b{color:var(--warn)}
+.sp-week{padding:8px 18px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sp-week h3{margin:10px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.sp-week .kv{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.sp-week .kv>div{padding:7px 11px;font-variant-numeric:tabular-nums}
+@media(min-width:700px){.sp-week .kv{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sp-card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px 14px}.sp-card .sp-form{margin:12px 0}
+.sp-cats{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;gap:10px}.sp-cat b{font-variant-numeric:tabular-nums}
+.sp .row b{font-variant-numeric:tabular-nums;white-space:nowrap}.sp .row .t{min-width:0}
+.sp .az-h{margin-bottom:10px;gap:10px}.sp .az-h input[type=search]{flex:1;max-width:16rem;min-width:0}
+@media(max-width:560px){.sp-cat{grid-template-columns:minmax(0,7.5rem) 1fr auto}.sp-week{padding:6px 14px 14px}}
+.sp .row{align-items:center;gap:12px}.sp .row .t{flex:1 1 0;overflow-wrap:anywhere}.sp .row .date{min-width:3.2rem;flex:none}.sp .row .btn,.sp .row button{flex:none}
+@media(max-width:560px){.sp .row{gap:8px;padding:9px 10px}.sp .row .date{min-width:2.8rem;font-size:13px}}

@@ -2040,6 +2040,13 @@
   route();
   startSync();
 
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    const had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then((reg) => { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); }); }).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!had || document.getElementById('upd-bar')) return;
+      document.body.append(h('div', { id: 'upd-bar', role: 'status' }, h('span', {}, '🔄 Nuova versione disponibile'), h('button', { type: 'button', class: 'pri', onclick: () => location.reload() }, 'Aggiorna'), h('button', { type: 'button', onclick: (e) => e.target.parentNode.remove() }, '✕')));
+    });
+  }
   window.__gestionale = { publishFeed, feedICS, feedUrl, route, syncNow, login, getSession, get db() { return db; }, seedDemo, ENT };
 })();

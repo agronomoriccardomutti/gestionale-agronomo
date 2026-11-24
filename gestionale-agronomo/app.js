@@ -35,7 +35,18 @@
 
   /* ---------- Definizione dati ---------- */
   const TIPI_PRATICA = ['PAC / domanda unica', 'Anagrafe apistica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
-  const tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...learnedOf('pratiche', 'tipo'), ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
+  /* «Anagrafe apistica» e «Anagrafe Apistica» sono lo stesso tipo: si unifica la grafia (prima voce dell'elenco, altrimenti la più usata) */
+  const normTipi = () => {
+    const base = (db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA).concat(learnedOf('pratiche', 'tipo'));
+    const canon = new Map(); base.forEach((t) => { const k = String(t).trim().toLowerCase(); if (k && !canon.has(k)) canon.set(k, String(t).trim()); });
+    const cnt = {}; rows('pratiche').forEach((r) => { const t = (r.tipo || '').trim(); if (t) { const k = t.toLowerCase(); (cnt[k] = cnt[k] || {})[t] = ((cnt[k] || {})[t] || 0) + 1; } });
+    let ch = false;
+    rows('pratiche').forEach((r) => { const t = (r.tipo || '').trim(); if (!t) return; const k = t.toLowerCase(); const c = canon.get(k) || Object.entries(cnt[k]).sort((a, b) => b[1] - a[1])[0][0]; if (r.tipo !== c) { r.tipo = c; r.updated = NOW(); ch = true; } });
+    if (ch) save();
+  };
+  const tipiPratica = () => { return uniqCI(_tipiPratica()); };
+  const uniqCI = (a) => { const s = new Set(); return a.filter((x) => { const k = String(x).trim().toLowerCase(); if (!k || s.has(k)) return false; s.add(k); return true; }); };
+  const _tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...learnedOf('pratiche', 'tipo'), ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
   /* campi che «imparano»: un valore nuovo scritto a mano viene ricordato e proposto la volta dopo */
   const learnedOf = (ek, k) => { const l = db.settings && db.settings.learned && db.settings.learned[ek + '.' + k]; return Array.isArray(l) ? l : []; };
   const learn = (ek, k, v) => { const f = fieldOf(ENT[ek], k), known = new Set([...(f.list || (f.listFn && f.listFn()) || []), ...learnedOf(ek, k)].map((x) => String(x).toLowerCase())); if (known.has(String(v).toLowerCase())) return; db.settings.learned = db.settings.learned || {}; db.settings.learned[ek + '.' + k] = [...learnedOf(ek, k), v]; };
@@ -2185,6 +2196,7 @@
   }
   let lastMod = '';
   function route() {
+    try { normTipi(); } catch (e) { /* non blocca la vista */ }
     const [, id = 'oggi', ek, arg] = (location.hash || '#/oggi').split('/');
     const mod = MODS.find((m) => m.id === id) || MODS[0];
     if (lastMod !== mod.id + '/' + (ek || '')) { ui.q = ''; lastMod = mod.id + '/' + (ek || ''); }

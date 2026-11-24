@@ -43,6 +43,9 @@
   const maxTot = (v) => (v.parti || []).reduce((a, p) => a + (+p.max || 0), 0);
   const fmt1 = (n) => new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
 
+  const gmailSearch = (q) => 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
+  const gmailCompose = (to, subj) => 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + (subj ? '&su=' + encodeURIComponent(subj) : '');
+  const gmailActions = [{ label: '✉️ Scrivi (Gmail)', show: (r) => !!r.email, href: (r) => gmailCompose(r.email) }, { label: '🔍 Mail in Gmail', show: (r) => !!(r.email || r.nome || r.ragione), href: (r) => gmailSearch(r.email ? 'from:' + r.email + ' OR to:' + r.email : '"' + (r.nome || r.ragione) + '"') }];
   const ENT = {
     parcelle: {
       label: 'Parcelle', one: 'parcella', order: { k: 'nome', dir: 1 },
@@ -221,7 +224,7 @@
         { k: 'cfpiva', l: 'C.F. / P.IVA', t: 'text' },
         { k: 'indirizzo', l: 'Indirizzo', t: 'text' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => r.nome, cols: ['telefono', 'email'],
+      title: (r) => r.nome, cols: ['telefono', 'email'], actions: gmailActions,
     },
     pratiche: {
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
@@ -687,6 +690,7 @@
     h('div', { class: 'card-a' },
       next && relBadge(next.date),
       (ent.actions || []).filter((a) => a.show(r)).map((a) => btn(a.label, () => {
+        if (a.href) { window.open(a.href(r), '_blank', 'noopener'); return; }
         if (a.go) { location.hash = a.go(r); return; }
         const i = rows(ek).findIndex((x) => x.id === r.id); const copy = Object.assign({}, rows(ek)[i]);
         a.run(copy); copy.updated = new Date().toISOString(); rows(ek)[i] = copy; save(); route();
@@ -1412,7 +1416,7 @@
     return h('div', { class: 'az' }, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')),
       h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, tag(stage[0], stage[1]), a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune), lastContact && h('span', { class: 'pill' }, 'ultimo contatto ' + L.fmtDate(lastContact.data)))),
         h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('aziende', a), ''))),
-      h('div', { class: 'bar az-act' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: 'mailto:' + a.email }, '✉️ Email'),
+      h('div', { class: 'bar az-act' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: gmailCompose(a.email), target: '_blank', rel: 'noopener' }, '✉️ Scrivi (Gmail)'), h('a', { class: 'btnlink', href: gmailSearch(a.email ? 'from:' + a.email + ' OR to:' + a.email : '"' + a.ragione + '"'), target: '_blank', rel: 'noopener' }, '🔍 Mail in Gmail'),
         btn('📝 Nota', () => openForm('attivita', null, { azienda: id, tipo: 'Nota' }), '')),
       h('div', { class: 'az-quick' }, btn('✅ Contattata il…', () => openStatoRapido(a, 'contattata'), 'pri'), btn('📅 Ispezione fissata il…', () => openStatoRapido(a, 'fissata'), 'pri'), btn('🔔 Da richiamare', () => openAppuntoContatto(a), '')),
       banner,

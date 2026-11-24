@@ -289,3 +289,45 @@ tr.abs td.nm{opacity:1}
 @media(max-width:560px){.sp-cat{grid-template-columns:minmax(0,7.5rem) 1fr auto}.sp-week{padding:6px 14px 14px}}
 .sp .row{align-items:center;gap:12px}.sp .row .t{flex:1 1 0;overflow-wrap:anywhere}.sp .row .date{min-width:3.2rem;flex:none}.sp .row .btn,.sp .row button{flex:none}
 @media(max-width:560px){.sp .row{gap:8px;padding:9px 10px}.sp .row .date{min-width:2.8rem;font-size:13px}}
+
+/* ===== Tema: look più morbido e curato (valido in tutta l'app) ===== */
+:root{--bg:#f3f4ee;--bd:#e1e3d8;--ink:#1c281e;--mut:#6a766d;--pri:#2e7a43;--pri-2:#256a39;--chip:#e8efe4;--sh:0 1px 2px rgba(28,40,30,.05),0 4px 14px rgba(28,40,30,.06);--sh-h:0 2px 4px rgba(28,40,30,.07),0 8px 22px rgba(28,40,30,.10);--r:14px}
+@media (prefers-color-scheme:dark){:root{--bg:#111713;--card:#1a221c;--bd:#2a362d;--chip:#243027;--sh:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);--sh-h:0 2px 4px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.35)}}
+body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45;-webkit-font-smoothing:antialiased;background:var(--bg) linear-gradient(180deg,rgba(46,122,67,.05),transparent 240px) no-repeat}
+.top{position:sticky;top:0;z-index:6;background:color-mix(in srgb,var(--card) 88%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--bd);font-weight:600}
+main{padding:18px 16px 24px}
+h2{font-size:24px;letter-spacing:-.015em;margin:6px 0 16px}
+h3{font-size:12.5px;letter-spacing:.07em;font-weight:700}
+nav{background:color-mix(in srgb,var(--card) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 -4px 18px rgba(28,40,30,.07);border-top:1px solid var(--bd)}
+nav a{position:relative;transition:color .15s;font-weight:500}
+nav a .i{transition:transform .15s}
+nav a:hover .i{transform:translateY(-1px)}
+nav a.on{font-weight:700}
+nav a.on::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 4px 4px;background:var(--pri)}
+.tile,.card,.row,.sp-card,.sp-cats,.sp-week,.sp-per{box-shadow:var(--sh);border-radius:var(--r)}
+.row{border-radius:12px}
+.card,.row{transition:box-shadow .18s,transform .18s,border-color .18s}
+.card:hover,.row:hover{box-shadow:var(--sh-h);border-color:color-mix(in srgb,var(--pri) 35%,var(--bd))}
+.card:active,.row:active{transform:scale(.995)}
+.card{padding:14px 16px}
+.card-t{font-size:16px}
+button,.btn,.btnlink{border-radius:10px;font-weight:500;transition:background .15s,box-shadow .15s,transform .1s,border-color .15s;box-shadow:0 1px 1px rgba(28,40,30,.04)}
+button:hover,.btn:hover,.btnlink:hover{border-color:color-mix(in srgb,var(--pri) 45%,var(--bd));background:color-mix(in srgb,var(--pri) 6%,var(--card))}
+button:active,.btn:active{transform:translateY(1px)}
+button.pri{background:linear-gradient(180deg,var(--pri),var(--pri-2));box-shadow:0 2px 6px rgba(46,122,67,.28)}
+button.pri:hover{background:linear-gradient(180deg,var(--pri),var(--pri-2));filter:brightness(1.07)}
+input,select,textarea{border-radius:10px;padding:10px 12px;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px color-mix(in srgb,var(--pri) 22%,transparent)}
+:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+.chip{transition:background .15s,transform .1s;font-weight:500;padding:7px 15px}
+.chip:hover{background:color-mix(in srgb,var(--pri) 18%,var(--chip))}
+.chip.on{box-shadow:0 2px 6px rgba(46,122,67,.25)}
+.badge{font-weight:600;padding:3px 9px}
+.tile{padding:12px 14px}.tile b{font-size:21px;letter-spacing:-.01em}
+dialog{border:none;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.28)}
+dialog::backdrop{background:rgba(15,25,18,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.dlg-in{padding:20px;gap:14px}
+#toast{box-shadow:0 6px 20px rgba(0,0,0,.25);font-weight:500}
+.empty{padding:36px 8px;font-size:15px}
+.az-h{align-items:center}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}

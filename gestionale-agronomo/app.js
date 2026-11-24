@@ -276,6 +276,15 @@
         dropWhere('studenti', (x) => x.classe === r.id); dropWhere('verifiche', (x) => x.classe === r.id);
       },
     },
+    attivita: {
+      label: 'Contatti registrati', one: 'contatto', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'azienda', l: 'Azienda', t: 'ref', to: 'aziende', req: 1 },
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Chiamata', 'Email', 'Messaggio', 'Visita', 'Nota'], req: 1 },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'testo', l: 'Cosa ci siamo detti', t: 'textarea' }],
+      title: (r) => (r.tipo || 'Contatto') + ' – ' + lab('aziende', r.azienda), cols: ['azienda', 'tipo', 'data'],
+    },
     docenti: {
       label: 'Docenti', one: 'docente', order: { k: 'nome', dir: 1 },
       fields: [
@@ -643,7 +652,7 @@
   }
 
   /* ---------- Viste ---------- */
-  const ui = { q: '', showDone: false, per: '', mat: '' };
+  const ui = { azf: '', q: '', showDone: false, per: '', mat: '' };
   const tile = (l, v, bad) => h('div', { class: 'tile' + (bad ? ' bad' : '') }, h('b', {}, v), h('span', {}, l));
   const tiles = (arr) => h('div', { class: 'tiles' }, arr.map(([l, v, b]) => tile(l, v, b)));
 
@@ -1300,37 +1309,52 @@
     const a = byId('aziende', id);
     if (!a) return h('div', { class: 'empty' }, 'Azienda non trovata.');
     const T = L.today();
-    const isp = rows('ispezioni').filter((i) => i.azienda === id).sort((x, y) => (y.data || '').localeCompare(x.data || ''));
-    const appunti = rows('promemoria').filter((p) => p.azienda === id).sort((x, y) => (x.data || '9').localeCompare(y.data || '9'));
+    const isp = rows('ispezioni').filter((i) => i.azienda === id);
+    const appunti = rows('promemoria').filter((p) => p.azienda === id);
     const m44 = rows('modello44').filter((m) => m.azienda === id).sort((x, y) => String(x.numero || '').localeCompare(String(y.numero || ''), 'it', { numeric: true }));
-    const next = isp.filter((i) => i.data && i.data >= T).sort((x, y) => x.data.localeCompare(y.data))[0];
-    const open = appunti.filter((p) => p.stato !== 'Fatto');
+    const att = rows('attivita').filter((x) => x.azienda === id);
+    const next = isp.filter((i) => i.data && i.data >= T && i.stato !== 'Svolta').sort((x, y) => x.data.localeCompare(y.data))[0];
+    const open = appunti.filter((p) => p.stato !== 'Fatto').sort((x, y) => (x.data || '9').localeCompare(y.data || '9'));
+    const lastDone = isp.filter((i) => i.stato === 'Svolta' || (i.data && i.data < T)).sort((x, y) => (y.data || '').localeCompare(x.data || ''))[0];
+    const lastContact = att.filter((x) => x.tipo !== 'Nota').sort((x, y) => (y.data || '').localeCompare(x.data || ''))[0];
+    const stage = open.length ? ['Da contattare', 'warn'] : next ? ['Ispezione programmata', 'info'] : lastDone ? ['Ispezione svolta', 'ok'] : ['Nessuna attività', ''];
     const tel = a.telefono || a.fisso;
     const line = (ico, l, v, href) => v ? h('div', { class: 'az-l' }, h('span', { class: 'az-i' }, ico), h('div', {}, h('small', {}, l), href ? h('a', { href: href + v }, v) : h('span', {}, v))) : null;
-    const sec = (title, count, content, action) => h('section', { class: 'az-sec' }, h('div', { class: 'az-h' }, h('h3', {}, title, count != null && h('span', { class: 'az-n' }, count)), action || null), content);
     const place = [a.ubicazione, [a.comune, a.provincia && '(' + a.provincia + ')'].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const contacts = [line('✉️', 'Email', a.email, 'mailto:'), line('📱', 'Cellulare', a.telefono, 'tel:'), line('☎️', 'Telefono fisso', a.fisso, 'tel:')].filter(Boolean);
     const dati = [line('🆔', 'Codice operatore', a.codice), line('💶', 'Importo ispezione', a.importo !== undefined && a.importo !== '' ? L.eur(+a.importo) : ''), line('📍', 'Ubicazione', place), line('🧑‍🔧', 'Tecnico', a.tecnico)].filter(Boolean);
+    const card = (title, content, action) => h('section', { class: 'az-side' }, h('div', { class: 'az-h' }, h('h3', {}, title), action || null), content);
+    // prossima azione
+    const nx = open[0] ? { ico: '🔔', t: open[0].titolo, d: open[0].data, go: () => openForm('promemoria', open[0]) } : next ? { ico: '📋', t: 'Ispezione' + (next.destinazione ? ' – ' + next.destinazione : ''), d: next.data, go: () => openForm('ispezioni', next) } : null;
+    const banner = nx ? h('div', { class: 'az-next', tabindex: '0', onclick: nx.go }, h('span', { class: 'az-i' }, nx.ico), h('div', {}, h('small', {}, 'Prossima azione'), h('b', {}, nx.t)), h('span', { class: 'az-when' + (nx.d && nx.d < T ? ' late' : '') }, nx.d ? L.fmtDate(nx.d) : 'senza data')) : null;
+    // timeline unificata
+    const ICO = { Chiamata: '📞', Email: '✉️', Messaggio: '💬', Visita: '🚗', Nota: '📝' };
+    const items = [];
+    for (const x of att) items.push({ k: 'c', d: x.data, ico: ICO[x.tipo] || '📝', t: x.tipo, x: x.testo, go: () => openForm('attivita', x) });
+    for (const i of isp) items.push({ k: 'i', d: i.data, ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: 'Carico ' + (i.dataCarico ? L.fmtDate(i.dataCarico) : '—') + (i.periodo ? ' · ' + lab('periodi', i.periodo) : ''), st: i.stato, go: () => openForm('ispezioni', i) });
+    for (const p of appunti) items.push({ k: 'a', d: p.data, ico: p.stato === 'Fatto' ? '✅' : '🔔', t: p.titolo, x: (p.note || '').split('\n').slice(1).join(' · '), st: p.stato === 'Fatto' ? 'Fatto' : 'Aperto', go: () => openForm('promemoria', p) });
+    items.sort((x, y) => (y.d || '9999').localeCompare(x.d || '9999'));
+    const flt = ui.azf || '';
+    const FL = [['', 'Tutto'], ['c', 'Contatti'], ['i', 'Ispezioni'], ['a', 'Appunti']];
+    const shown = items.filter((x) => !flt || x.k === flt);
+    const tl = shown.length ? h('div', { class: 'tl' }, shown.map((x) => h('div', { class: 'tl-i' + (x.d && x.d > T ? ' fut' : ''), tabindex: '0', onclick: x.go },
+      h('span', { class: 'tl-dot' }, x.ico), h('div', { class: 'tl-b' }, h('div', { class: 'tl-t' }, h('b', {}, x.t), x.st && tag(x.st, CL[x.st] || (x.st === 'Aperto' ? 'warn' : ''))), h('small', {}, (x.d ? L.fmtDate(x.d) : 'senza data') + (x.x ? ' · ' : ''), x.x || ''))))) : h('p', { class: 'note' }, 'Nessuna attività registrata.');
+    const m44c = m44.length ? h('div', {}, m44.map((m) => h('div', { class: 'row az-isp', tabindex: '0', onclick: () => openForm('modello44', m) }, h('span', { class: 'date' }, 'n. ' + (m.numero || '—')),
+      h('span', { class: 't' }, 'Esito: ' + (m.esito || '—'), h('div', { class: 'note' }, 'NC chiuse: ' + (m.ncChiuse || '—') + ' · Variazione: ' + (m.variazione || '—')))))) : h('p', { class: 'note' }, 'Nessun Modello 44.');
     return h('div', { class: 'az' }, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')),
-      h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune))),
-        h('div', { class: 'bar' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: 'mailto:' + a.email }, '✉️ Email'), btn('✏️ Modifica', () => openForm('aziende', a), ''))),
-      tiles([['Ispezioni', isp.length], ['Prossima', next ? L.fmtDate(next.data) : '—'], ['Appunti aperti', open.length, open.length > 0], ['Modello 44', m44.length]]),
-      h('div', { class: 'az-grid' },
-        sec('Contatti', null, contacts.length ? h('div', { class: 'az-card' }, contacts) : h('p', { class: 'note' }, 'Nessun contatto: aggiungi email e telefoni da “Modifica”.')),
-        sec('Dati azienda', null, dati.length ? h('div', { class: 'az-card' }, dati) : h('p', { class: 'note' }, '—'))),
-      a.note && h('p', { class: 'note az-note' }, a.note),
-      sec('Appunti', appunti.length, appunti.length ? h('div', {}, appunti.map((p) => h('div', { class: 'row' + (p.stato !== 'Fatto' && p.data && p.data < T ? ' late' : ''), tabindex: '0', onclick: () => openForm('promemoria', p) },
-        h('span', { class: 'date' }, p.data ? L.fmtDate(p.data) : '—'), h('span', { class: 't' }, p.titolo, p.stato === 'Fatto' ? ' ✓' : ''), h('span', { class: 'tag' }, (p.note || '').split('\n')[1] || '')))) : h('p', { class: 'note' }, 'Nessun appunto.'),
-        btn('📞 Da contattare', () => openAppuntoContatto(a), 'pri')),
-      sec('Ispezioni', isp.length, isp.length ? h('div', {}, isp.map((i) => h('div', { class: 'row az-isp', tabindex: '0', onclick: () => openForm('ispezioni', i) },
-        h('span', { class: 'date' }, i.data ? L.fmtDate(i.data) : '—'),
-        h('span', { class: 't' }, [i.partenza, i.destinazione].filter(Boolean).join(' → ') || 'Ispezione', h('div', { class: 'note' }, ['carico ' + (i.dataCarico ? L.fmtDate(i.dataCarico) : '—'), i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '))),
-        tag(i.stato, CL[i.stato])))) : h('p', { class: 'note' }, 'Nessuna ispezione.'),
-        btn('+ Nuova ispezione', () => openForm('ispezioni', null, { azienda: id }), 'pri')),
-      sec('Modello 44', m44.length, m44.length ? h('div', {}, m44.map((m) => h('div', { class: 'row az-isp', tabindex: '0', onclick: () => openForm('modello44', m) },
-        h('span', { class: 'date' }, 'n. ' + (m.numero || '—')),
-        h('span', { class: 't' }, 'Esito: ' + (m.esito || '—'), h('div', { class: 'note' }, 'NC precedenti chiuse: ' + (m.ncChiuse || '—') + ' · Variazione status: ' + (m.variazione || '—')))))) : h('p', { class: 'note' }, 'Nessun Modello 44.'),
-        btn('+ Nuovo Modello 44', () => openForm('modello44', null, { azienda: id }), 'pri')));
+      h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, tag(stage[0], stage[1]), a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune), lastContact && h('span', { class: 'pill' }, 'ultimo contatto ' + L.fmtDate(lastContact.data)))),
+        h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('aziende', a), ''))),
+      h('div', { class: 'bar az-act' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: 'mailto:' + a.email }, '✉️ Email'),
+        btn('➕ Registra contatto', () => openForm('attivita', null, { azienda: id, tipo: 'Chiamata' }), ''), btn('🔔 Da contattare', () => openAppuntoContatto(a), ''), btn('📋 Nuova ispezione', () => openForm('ispezioni', null, { azienda: id }), '')),
+      banner,
+      h('div', { class: 'az-cols' },
+        h('div', { class: 'az-main' }, h('div', { class: 'az-h' }, h('h3', {}, 'Attività', h('span', { class: 'az-n' }, items.length))),
+          h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (flt === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.azf = k; route(); } }, l))), tl),
+        h('aside', { class: 'az-aside' },
+          card('Contatti', contacts.length ? h('div', { class: 'az-card' }, contacts) : h('p', { class: 'note' }, 'Aggiungi email e telefoni da “Modifica”.')),
+          card('Dati azienda', dati.length ? h('div', { class: 'az-card' }, dati) : h('p', { class: 'note' }, '—')),
+          a.note && card('Note', h('p', { class: 'az-note' }, a.note)),
+          card('Modello 44', m44c, btn('+ Nuovo', () => openForm('modello44', null, { azienda: id }), 'pri')))));
   }
 
   /* ---------- Nota spese ispettori (modello EcoGruppo) ---------- */

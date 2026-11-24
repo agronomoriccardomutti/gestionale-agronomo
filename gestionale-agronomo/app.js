@@ -34,6 +34,8 @@
   }
 
   /* ---------- Definizione dati ---------- */
+  const TIPI_PRATICA = ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
+  const tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
   const STATI_PRATICA = ['Da avviare', 'In corso', 'In attesa', 'Consegnata', 'Chiusa'];
   const lab = (ek, id) => { const r = id && rows(ek).find((x) => x.id === id); return r ? ENT[ek].title(r) : ''; };
   const prodottiMagazzino = () => rows('magazzino').map((r) => r.prodotto).filter(Boolean);
@@ -235,7 +237,7 @@
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
       fields: [
         { k: 'cliente', l: 'Cliente', t: 'ref', to: 'clienti' },
-        { k: 'tipo', l: 'Tipo pratica', t: 'text', list: ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'] },
+        { k: 'tipo', l: 'Tipo pratica', t: 'text', listFn: () => tipiPratica() },
         { k: 'descrizione', l: 'Descrizione', t: 'text' },
         { k: 'scadenza', l: 'Scadenza', t: 'date' },
         { k: 'stato', l: 'Stato', t: 'select', opts: STATI_PRATICA, def: 'Da avviare', req: 1 },
@@ -855,6 +857,12 @@
     dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📬 Mail — ' + nome), h('p', { class: 'note' }, r.email), body, h('div', { class: 'dlg-btns' }, h('a', { class: 'btnlink', href: gmailSearch('from:' + r.email + ' OR to:' + r.email), target: '_blank', rel: 'noopener' }, 'Apri in Gmail'), h('button', { type: 'button', class: 'pri', onclick: () => dlg.close() }, 'Chiudi'))));
     dlg.showModal(); draw();
   }
+  function tipiSection() {
+    const ta = h('textarea', { rows: 8, spellcheck: 'false' }); ta.value = ((db.settings.tipiPratica && db.settings.tipiPratica.length) ? db.settings.tipiPratica : TIPI_PRATICA).join('\n');
+    ta.addEventListener('change', () => { db.settings.tipiPratica = ta.value.split('\n').map((x) => x.trim()).filter(Boolean); save(); toast('Elenco salvato'); });
+    return h('div', {}, h('h3', {}, 'Tipi di pratica'), h('p', { class: 'note' }, 'Uno per riga: è l’elenco che compare nel campo «Tipo pratica». Nel campo puoi comunque scrivere un tipo nuovo a mano: viene ricordato e proposto la volta dopo.'), ta,
+      h('div', { class: 'bar', style: 'margin-top:8px' }, h('button', { type: 'button', onclick: () => { delete db.settings.tipiPratica; save(); route(); toast('Elenco ripristinato'); } }, 'Ripristina predefiniti')));
+  }
   function gmailSection() {
     const id = h('input', { type: 'text', placeholder: 'xxxxxxxx.apps.googleusercontent.com', value: (db.settings.gClientId || ''), autocomplete: 'off', spellcheck: 'false' });
     id.addEventListener('change', () => { db.settings.gClientId = id.value.trim(); save(); toast('ID client salvato'); route(); });
@@ -893,6 +901,7 @@
         set('soglia', 'Soglia ricavi forfettario (€)', 'number', { min: 0, step: 1000 }),
         set('partenza', 'Luogo di partenza (nota spese)', 'text')),
       h('p', { class: 'note' }, 'Gli eventi esportati hanno un identificativo stabile: se li reimporti dopo averli modificati, il Calendario li aggiorna invece di duplicarli.'),
+      tipiSection(),
       gmailSection(),
       syncSection(),
       calendarSection(),

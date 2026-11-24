@@ -34,9 +34,11 @@
   }
 
   /* ---------- Definizione dati ---------- */
-  const TIPI_PRATICA = ['PAC / domanda unica', 'Anagrafe apistica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
+  const TIPI_PRATICA = ['PAC / domanda unica', 'Anagrafe Apistica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
   /* «Anagrafe apistica» e «Anagrafe Apistica» sono lo stesso tipo: si unifica la grafia (prima voce dell'elenco, altrimenti la più usata) */
   const normTipi = () => {
+    const fixA = (a) => Array.isArray(a) ? a.map((t) => String(t).trim().toLowerCase() === 'anagrafe apistica' ? 'Anagrafe Apistica' : t) : a;
+    if (db.settings) { if (db.settings.tipiPratica) db.settings.tipiPratica = fixA(db.settings.tipiPratica); if (db.settings.learned && db.settings.learned['pratiche.tipo']) db.settings.learned['pratiche.tipo'] = fixA(db.settings.learned['pratiche.tipo']); }
     const base = (db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA).concat(learnedOf('pratiche', 'tipo'));
     const canon = new Map(); base.forEach((t) => { const k = String(t).trim().toLowerCase(); if (k && !canon.has(k)) canon.set(k, String(t).trim()); });
     const cnt = {}; rows('pratiche').forEach((r) => { const t = (r.tipo || '').trim(); if (t) { const k = t.toLowerCase(); (cnt[k] = cnt[k] || {})[t] = ((cnt[k] || {})[t] || 0) + 1; } });
@@ -50,6 +52,11 @@
   /* campi che «imparano»: un valore nuovo scritto a mano viene ricordato e proposto la volta dopo */
   const learnedOf = (ek, k) => { const l = db.settings && db.settings.learned && db.settings.learned[ek + '.' + k]; return Array.isArray(l) ? l : []; };
   const learn = (ek, k, v) => { const f = fieldOf(ENT[ek], k), known = new Set([...(f.list || (f.listFn && f.listFn()) || []), ...learnedOf(ek, k)].map((x) => String(x).toLowerCase())); if (known.has(String(v).toLowerCase())) return; db.settings.learned = db.settings.learned || {}; db.settings.learned[ek + '.' + k] = [...learnedOf(ek, k), v]; };
+  /* duplica una pratica (anche chiusa): stessi dati di base, stato «Da avviare», senza scadenza né pagamenti/spese/denunce */
+  const duplicaPratica = (p) => {
+    const c = Object.assign({}, p, { id: uid(), stato: 'Da avviare', scadenza: '', updated: NOW() });
+    delete c.apDenominazione; delete c.apCodice; rows('pratiche').push(c); save(); toast('Pratica duplicata'); location.hash = '#/professione/pratica/' + c.id;
+  };
   const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti', 'denunce'];
   const pratEco = (p) => {
     const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
@@ -276,7 +283,7 @@
       extra: (r) => { const e = pratEco(r); return e.dovuto > 0 ? ['Incassato ' + L.eur(e.incassato) + ' su ' + L.eur(e.dovuto)] : []; },
       deleteWarn: 'Eliminare la pratica con pagamenti, spese, preventivi e documenti collegati?',
       onDelete: (r) => { for (const k of PRAT_FIGLI) { rows(k).filter((x) => x.pratica === r.id).forEach((x) => tombstone(k, x.id)); db.data[k] = rows(k).filter((x) => x.pratica !== r.id); } },
-      actions: [{ label: '✓ Consegnata', show: (r) => !['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'Consegnata'; } }, { label: '↩ Riapri', show: (r) => ['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'In corso'; } }],
+      actions: [{ label: '✓ Consegnata', show: (r) => !['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'Consegnata'; } }, { label: '↩ Riapri', show: (r) => ['Consegnata', 'Chiusa'].includes(r.stato), run: (r) => { r.stato = 'In corso'; } }, { label: '⧉ Duplica', show: () => true, fn: (r) => duplicaPratica(r) }],
     },
     pagamenti: {
       label: 'Pagamenti pratica', one: 'pagamento', order: { k: 'data', dir: -1 },
@@ -1905,6 +1912,7 @@
       h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '📁 ' + (p.tipo || 'Pratica')), h('div', { class: 'vtags' }, tag(p.stato || 'Da avviare', PCL[p.stato] || ''), cl && h('span', { class: 'pill' }, ENT.clienti.title(cl)), p.scadenza && tag('scade ' + L.fmtDate(p.scadenza), !done && p.scadenza < T ? 'warn' : ''))),
         h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('pratiche', p), ''))),
       h('div', { class: 'bar az-act' }, done ? btn('↩ Riapri', () => { p.stato = 'In corso'; p.updated = NOW(); save(); route(); }, '') : btn('✓ Consegnata', () => { p.stato = 'Consegnata'; p.updated = NOW(); save(); route(); }, 'pri'),
+        btn('⧉ Duplica', () => duplicaPratica(p), ''),
         btn('🧾 Crea fattura', () => openForm('fatture', null, { cliente: p.cliente || undefined, importo: e.residuo > 0 ? e.residuo : undefined, descrizione: p.tipo }), ''),
         cl && cl.email && h('a', { class: 'btnlink', href: gmailCompose(cl.email, p.tipo || ''), target: '_blank', rel: 'noopener' }, '✉️ Scrivi (Gmail)')),
       tiles([['Compenso', L.eur(e.compenso)], ['Spese da rimborsare', L.eur(e.speseR)], ['Incassato', L.eur(e.incassato)], ['Residuo', L.eur(e.residuo), e.residuo > 0 && done]]),

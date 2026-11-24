@@ -1120,6 +1120,41 @@
   const spBrev = (s) => { const [, m, d] = s.split('-').map(Number); return d + ' ' + ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'][m - 1]; };
   const spLab = (k) => spBrev(k) + ' – ' + spBrev(spEnd(k)) + ' ' + spEnd(k).slice(0, 4);
   const spDays = (x, y) => Math.round((new Date(y + 'T12:00') - new Date(x + 'T12:00')) / 86400000);
+  const spNorm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const SP_KW = {
+    Uscita: [
+      ['Carburante', /gasolio|benzina|diesel|carburante|metano|\bgpl\b|rifornimento|distributore|self service|\bpieno\b/],
+      ['Assicurazione/Bollo', /assicurazione|\brca\b|\bbollo\b|polizza/],
+      ['Manutenzione veicoli', /tagliando|gomme|pneumatic|revisione|meccanico|officina|olio motore|autolavaggio|ricambi|freni|batteria auto/],
+      ['Spesa alimentare', /\bspesa\b|supermercato|\bcoop\b|conad|esselunga|carrefour|lidl|eurospin|\bpam\b|aldi|panetteria|\bpane\b|macelleria|frutta|verdura|alimentari|\blatte\b/],
+      ['Casa/Utenze', /\bluce\b|\bgas\b|bolletta|\benel\b|\bacqua\b|affitto|condominio|\btari\b|\bimu\b|riscaldamento|pellet|legna/],
+      ['Telefono/Internet', /telefon|internet|fibra|\btim\b|vodafone|windtre|iliad|ricarica|\bsim\b/],
+      ['Farmacia', /farmaci|parafarmacia|medicin/],
+      ['Salute', /dentista|medico|visita|analisi|\bticket\b|oculista|fisioterap|ospedale/],
+      ['Abbigliamento', /vestit|scarpe|giacca|pantaloni|maglia|abbigliament|calze/],
+      ['Bar', /\bbar\b|caffe|cappuccino|colazione|aperitivo|spritz|birra/],
+      ['Ristoranti/Svago', /ristorante|pizza|trattoria|osteria|\bcena\b|pranzo|cinema|teatro|concerto|gelato|hotel|vacanza|ingresso/],
+      ['Regali', /regalo|fiori|compleanno/],
+      ['Libri/Cultura', /\blibro\b|\blibri\b|libreria|giornale|rivista|museo/],
+      ['Figlie', /figli|\bscuola\b|mensa|\bgita\b|danza|nuoto|cartoleria|quaderni/],
+      ['Abbonamenti', /abbonament|netflix|spotify|youtube|disney|dazn|icloud|google one/],
+      ['Rate/Finanziamenti', /\brata\b|finanziament|mutuo|prestito/],
+      ['Tasse/Imposte', /irpef|\binps\b|\btasse\b|imposta|\bf24\b|commercialista|\biva\b|enpaia/]],
+    Entrata: [
+      ['Stipendio', /stipendio|emolument|busta paga/],
+      ['Rimborsi', /rimborso|nota spese/],
+      ['Consulenze agronomo', /consulenz|parcella|fattura|ispezion|perizia|progetto|pratica|\bpac\b/],
+      ['Regali ricevuti', /regalo/]]
+  };
+  /* categoria (e veicolo) proposti dalla descrizione: prima lo storico dei tuoi movimenti, poi le parole chiave */
+  const spSuggest = (tipo, testo, mov) => {
+    const q = spNorm(testo); if (!q || tipo === 'Prelievo') return null;
+    const conta = {}; let vei = {};
+    (mov || []).forEach((m) => { if (m.tipo !== tipo || !m.categoria) return; const d = spNorm(m.descrizione); if (d && (d === q || (q.length >= 3 && d.startsWith(q)))) { conta[m.categoria] = (conta[m.categoria] || 0) + 1; if (m.veicolo) vei[m.categoria + '|' + m.veicolo] = (vei[m.categoria + '|' + m.veicolo] || 0) + 1; } });
+    const top = Object.entries(conta).sort((a, b) => b[1] - a[1])[0];
+    if (top) { const v = Object.entries(vei).filter(([k]) => k.startsWith(top[0] + '|')).sort((a, b) => b[1] - a[1])[0]; return { cat: top[0], vei: v ? v[0].split('|')[1] : '' }; }
+    const k = (SP_KW[tipo] || []).find(([, re]) => re.test(q)); return k ? { cat: k[0], vei: '' } : null;
+  };
   const spAddM = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(y, m - 1 + n, 1), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(Math.min(d, last)); };
   function spTot(key) {
     const t = { entrate: 0, uscite: 0, stip: false, cat: {} };
@@ -1220,7 +1255,16 @@
     const veiFld = SP.tipo === 'Uscita' ? fl('Veicolo', vei) : null; if (veiFld) { const upd = () => { veiFld.hidden = !['Carburante', 'Manutenzione veicoli', 'Assicurazione/Bollo'].includes(catSel.value); }; catSel.addEventListener('change', upd); upd(); }
     const dt = mk('data', h('input', { type: 'date', value: T })), im = mk('importo', h('input', { type: 'number', step: '0.01', min: '0', inputmode: 'decimal', placeholder: '0,00' })), ds = mk('descrizione', h('input', { type: 'text', placeholder: SP.tipo === 'Entrata' ? 'es. Consulenza' : 'es. Gasolio, Spesa' }));
     const met = SP.tipo !== 'Prelievo' ? sel('metodo', ['Contanti', 'Carta', 'Bonifico'], SP.tipo === 'Entrata' ? 'Bonifico' : 'Contanti') : null;
-    if (ds && catSel) ds.addEventListener('change', () => { if (SP.tipo === 'Uscita' && /gasolio|benzina|carburante|diesel/i.test(ds.value)) { catSel.value = 'Carburante'; catSel.dispatchEvent(new Event('change')); if (!vei.value) vei.value = 'Nissan'; } });
+    if (ds && catSel) {
+      let manual = false, auto = false; catSel.addEventListener('change', () => { if (!auto) manual = true; });
+      ds.addEventListener('input', () => {
+        if (!ds.value.trim()) { manual = false; return; }
+        if (manual) return;
+        const g = spSuggest(SP.tipo, ds.value, mov); if (!g || !catList.includes(g.cat)) return;
+        auto = true; catSel.value = g.cat; catSel.dispatchEvent(new Event('change')); auto = false;
+        if (vei && !veiFld.hidden) vei.value = g.vei || (g.cat === 'Carburante' && !vei.value ? 'Nissan' : vei.value);
+      });
+    }
     body.append(h('h3', {}, 'Aggiungi movimento'), seg, h('div', { class: 'sp-form' }, fl('Data', dt), fl('Importo €', im), fl('Descrizione', ds, 'w2'), catSel && fl('Categoria', catSel), veiFld, met && fl('Pagamento', met)),
       h('div', { class: 'bar' }, btn('Aggiungi', () => {
         const v = +String(im.value).replace(',', '.'); if (!dt.value || !ds.value.trim() || !(v > 0)) return toast('Servono data, descrizione e importo');

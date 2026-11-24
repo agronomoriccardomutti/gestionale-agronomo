@@ -229,7 +229,7 @@
         { k: 'cfpiva', l: 'C.F. / P.IVA', t: 'text' },
         { k: 'indirizzo', l: 'Indirizzo', t: 'text' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => [r.titolo, r.cognome, r.nome].filter(Boolean).join(' '), sortKey: (r) => r.cognome ? r.cognome + ' ' + (r.nome || '') : (r.nome || ''), cols: ['telefono', 'email'], actions: gmailActions,
+      title: (r) => [r.titolo, r.cognome, r.nome].filter(Boolean).join(' '), sortKey: (r) => r.cognome ? r.cognome + ' ' + (r.nome || '') : (r.nome || ''), cols: ['telefono', 'email'], actions: [{ label: '📬 Mail', show: (r) => !!r.email, fn: (r) => openMailCliente(r) }].concat(gmailActions),
     },
     pratiche: {
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
@@ -720,9 +720,11 @@
     h('div', { class: 'card-m' }, meta.join(' · ')),
     h('div', { class: 'card-a' },
       next && relBadge(next.date),
+      ek === 'clienti' && r.email && GM.ok() && (() => { const b = h('span', { class: 'badge mailb', hidden: true }); GM.chain = GM.chain.then(() => GM.unread(r.email)).then((n) => { if (n > 0) { b.textContent = '✉️ ' + (n >= 20 ? '20+' : n) + (n === 1 ? ' nuova' : ' nuove'); b.hidden = false; } }).catch(() => {}); return b; })(),
       (ent.actions || []).filter((a) => a.show(r)).map((a) => btn(a.label, () => {
         if (a.href) { window.open(a.href(r), '_blank', 'noopener'); return; }
         if (a.go) { location.hash = a.go(r); return; }
+        if (a.fn) { a.fn(r); return; }
         const i = rows(ek).findIndex((x) => x.id === r.id); const copy = Object.assign({}, rows(ek)[i]);
         a.run(copy); copy.updated = new Date().toISOString(); rows(ek)[i] = copy; save(); route();
       })),
@@ -809,6 +811,62 @@
     save();
   }
 
+  /* ---------- Mail dei clienti (Gmail, sola lettura, direttamente dal browser) ---------- */
+  const GM = { tok: null, exp: 0, cache: {}, chain: Promise.resolve() };
+  try { const j = JSON.parse(sessionStorage.getItem('gm:tok') || 'null'); if (j && j.exp > Date.now() + 30000) { GM.tok = j.t; GM.exp = j.exp; } } catch (e) { /* niente */ }
+  GM.ok = () => !!GM.tok && GM.exp > Date.now() + 30000;
+  GM.id = () => String((db.settings && db.settings.gClientId) || '').trim();
+  GM.script = () => new Promise((ok, ko) => { if (window.google && window.google.accounts && window.google.accounts.oauth2) return ok(); const sc = document.createElement('script'); sc.src = 'https://accounts.google.com/gsi/client'; sc.onload = ok; sc.onerror = () => ko(new Error('Google non raggiungibile: sei offline?')); document.head.append(sc); });
+  GM.connect = () => GM.script().then(() => new Promise((ok, ko) => {
+    const c = window.google.accounts.oauth2.initTokenClient({ client_id: GM.id(), scope: 'https://www.googleapis.com/auth/gmail.readonly',
+      callback: (r) => { if (r.error) return ko(new Error(r.error_description || r.error)); GM.tok = r.access_token; GM.exp = Date.now() + (+r.expires_in || 3600) * 1000; GM.cache = {}; try { sessionStorage.setItem('gm:tok', JSON.stringify({ t: GM.tok, exp: GM.exp })); } catch (e) { /* niente */ } ok(); },
+      error_callback: (e) => ko(new Error(e && e.type === 'popup_closed' ? 'Finestra chiusa prima di autorizzare' : 'Accesso non riuscito')) });
+    c.requestAccessToken({ prompt: '' });
+  }));
+  GM.off = () => { GM.tok = null; GM.exp = 0; GM.cache = {}; try { sessionStorage.removeItem('gm:tok'); } catch (e) { /* niente */ } };
+  GM.api = async (path) => {
+    const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/' + path, { headers: { Authorization: 'Bearer ' + GM.tok } });
+    if (r.status === 401) { GM.off(); throw new Error('Sessione Gmail scaduta: ricollega.'); }
+    if (!r.ok) throw new Error('Gmail: errore ' + r.status); return r.json();
+  };
+  const gmCached = (k, fn) => { const c = GM.cache[k]; if (c && Date.now() - c.t < 180000) return Promise.resolve(c.v); return fn().then((v) => { GM.cache[k] = { t: Date.now(), v }; return v; }); };
+  GM.unread = (email) => gmCached('u:' + email, async () => (await GM.api('messages?maxResults=20&q=' + encodeURIComponent('from:' + email + ' is:unread in:inbox'))).messages?.length || 0);
+  GM.recent = (email) => gmCached('r:' + email, async () => {
+    const j = await GM.api('threads?maxResults=8&q=' + encodeURIComponent('from:' + email + ' OR to:' + email)); const out = [];
+    for (const th of j.threads || []) {
+      const t = await GM.api('threads/' + th.id + '?format=metadata&metadataHeaders=Subject&metadataHeaders=From'); const ms = t.messages || [], last = ms[ms.length - 1] || {};
+      const hd = (n) => ((last.payload && last.payload.headers) || []).find((x) => x.name.toLowerCase() === n)?.value || '';
+      out.push({ id: th.id, subject: hd('subject') || '(senza oggetto)', from: hd('from').replace(/<.*>/, '').replace(/"/g, '').trim() || hd('from'), date: +last.internalDate || 0, snippet: last.snippet || '', unread: ms.some((m) => (m.labelIds || []).includes('UNREAD')), n: ms.length });
+    }
+    return out;
+  });
+  const gmFmt = (ms) => { const d = new Date(ms), t = new Date(); return d.toDateString() === t.toDateString() ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: d.getFullYear() === t.getFullYear() ? undefined : '2-digit' }); };
+  function openMailCliente(r) {
+    const dlg = document.getElementById('dlg'); dlg.replaceChildren(); const body = h('div', {});
+    const nome = ENT.clienti.title(r), draw = async () => {
+      if (!GM.id()) { body.replaceChildren(h('p', {}, 'Per vedere le mail qui serve collegare Gmail (una volta sola).'), h('div', { class: 'bar' }, h('button', { type: 'button', class: 'pri', onclick: () => { dlg.close(); location.hash = '#/impostazioni'; } }, 'Vai alle Impostazioni'))); return; }
+      if (!GM.ok()) { body.replaceChildren(h('p', {}, 'Collega Gmail per leggere le mail di ' + nome + '. L’accesso è di sola lettura e dura circa un’ora.'), h('div', { class: 'bar' }, h('button', { type: 'button', class: 'pri', onclick: async () => { try { await GM.connect(); draw(); route(); } catch (e) { toast(e.message); } } }, 'Collega Gmail'))); return; }
+      body.replaceChildren(h('p', { class: 'note' }, 'Carico le mail…'));
+      try {
+        const list = await GM.recent(r.email);
+        body.replaceChildren(list.length ? h('div', {}, list.map((m) => h('a', { class: 'mail-r' + (m.unread ? ' nuova' : ''), href: 'https://mail.google.com/mail/u/0/#all/' + m.id, target: '_blank', rel: 'noopener' }, h('div', { class: 'mail-t' }, m.unread ? h('i', { class: 'dot' }) : null, h('span', {}, m.subject), h('small', {}, gmFmt(m.date))), h('div', { class: 'note' }, m.from + (m.n > 1 ? ' · ' + m.n + ' messaggi' : '')), h('div', { class: 'note mail-s' }, m.snippet)))) : h('p', { class: 'note' }, 'Nessuna mail con ' + r.email + '.'));
+      } catch (e) { body.replaceChildren(h('p', { class: 'neg' }, e.message), h('div', { class: 'bar' }, h('button', { type: 'button', onclick: draw }, 'Riprova'))); }
+    };
+    dlg.append(h('div', { class: 'dlg-in' }, h('h2', {}, '📬 Mail — ' + nome), h('p', { class: 'note' }, r.email), body, h('div', { class: 'dlg-btns' }, h('a', { class: 'btnlink', href: gmailSearch('from:' + r.email + ' OR to:' + r.email), target: '_blank', rel: 'noopener' }, 'Apri in Gmail'), h('button', { type: 'button', class: 'pri', onclick: () => dlg.close() }, 'Chiudi'))));
+    dlg.showModal(); draw();
+  }
+  function gmailSection() {
+    const id = h('input', { type: 'text', placeholder: 'xxxxxxxx.apps.googleusercontent.com', value: (db.settings.gClientId || ''), autocomplete: 'off', spellcheck: 'false' });
+    id.addEventListener('change', () => { db.settings.gClientId = id.value.trim(); save(); toast('ID client salvato'); route(); });
+    const st = GM.ok() ? '✅ Collegato (la sessione dura circa un’ora)' : GM.id() ? 'Non collegato in questa sessione' : 'Non configurato';
+    return h('div', {}, h('h3', {}, 'Mail dei clienti (Gmail)'),
+      h('p', { class: 'note' }, 'Sulla scheda di ogni cliente con email compare il pulsante «📬 Mail» (ultime conversazioni) e il numero di mail non lette. Lettura soltanto: le mail restano nel tuo browser e non vengono salvate né sincronizzate.'),
+      h('details', {}, h('summary', {}, 'Come configurare (una volta sola)'),
+        h('ol', { class: 'note' }, ['Vai su console.cloud.google.com e crea un progetto (es. «Gestionale»).', 'Menu «API e servizi» › «Libreria»: cerca «Gmail API» e premi Abilita.', '«Schermata di consenso OAuth»: tipo Esterno, nome app a piacere, aggiungi la tua email tra gli «Utenti di prova».', '«Credenziali» › «Crea credenziali» › «ID client OAuth» › Applicazione web. In «Origini JavaScript autorizzate» scrivi https://agronomoriccardomutti.github.io', 'Copia l’ID client (finisce con .apps.googleusercontent.com) e incollalo qui sotto.', 'Premi «Collega Gmail»: Google avviserà che l’app non è verificata, è normale (è tua): Avanzate › Vai a… › Consenti.'].map((x) => h('li', {}, x)))),
+      h('div', { class: 'fld' }, h('label', {}, 'ID client Google'), id),
+      h('div', { class: 'bar' }, h('button', { type: 'button', class: 'pri', onclick: async () => { if (!GM.id()) return toast('Incolla prima l’ID client'); try { await GM.connect(); toast('Gmail collegato'); route(); } catch (e) { toast(e.message); } } }, 'Collega Gmail'), GM.ok() && h('button', { type: 'button', onclick: () => { GM.off(); route(); } }, 'Scollega'), h('span', { class: 'note' }, st)));
+  }
+
   function viewImpostazioni() {
     const s = db.settings;
     const set = (k, label, type, extra) => {
@@ -835,6 +893,7 @@
         set('soglia', 'Soglia ricavi forfettario (€)', 'number', { min: 0, step: 1000 }),
         set('partenza', 'Luogo di partenza (nota spese)', 'text')),
       h('p', { class: 'note' }, 'Gli eventi esportati hanno un identificativo stabile: se li reimporti dopo averli modificati, il Calendario li aggiorna invece di duplicarli.'),
+      gmailSection(),
       syncSection(),
       calendarSection(),
       h('h3', {}, 'Backup dei dati'),

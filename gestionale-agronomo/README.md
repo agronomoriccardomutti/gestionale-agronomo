@@ -144,3 +144,6 @@ Sezione **Spese**: periodo dal 23 al 22, stipendio, budget settimanale (con quot
 
 ### Previsioni spese
 Nella pagina Spese, card «Previsione di fine periodo»: stima di quanto resterà (o mancherà) al 22, uscite variabili attese per categoria (ritmo del periodo + media degli ultimi 3 periodi), ricorrenti in scadenza, stima del periodo successivo e piccoli consigli. Calcolata sul dispositivo: nessun dato finanziario esce dal telefono. Più storico inserisci, più è precisa.
+
+### Mail dei clienti (Gmail)
+Opzionale. In Impostazioni › «Mail dei clienti» si incolla l'ID client OAuth Google (istruzioni nella pagina) e si preme «Collega Gmail». Sulle schede dei clienti con email compaiono il pulsante «📬 Mail» (ultime conversazioni) e il numero di mail non lette. Permesso di sola lettura (`gmail.readonly`); il token resta nella sessione del browser (circa 1 ora), le mail non vengono salvate né sincronizzate.

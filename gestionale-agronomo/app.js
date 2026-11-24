@@ -1256,13 +1256,13 @@
           cand.length && h('button', { type: 'button', class: 'pri', onclick: () => { rows('piano').push({ id: uid(), azienda: pick.value, periodo: id, tipo: 'Annuale', campionamento: '', note: '', updated: NOW() }); save(); dlg.close(); route(); } }, 'Aggiungi'))));
       dlg.showModal();
     };
-    const notaRows = () => rows('ispezioni').filter((i) => inPer(i, p) && i.azienda && i.stato !== 'Programmata').sort((a, b) => (a.data || '').localeCompare(b.data || '')).map((i) => {
+    const notaRows = () => rows('ispezioni').filter((i) => inPer(i, p) && i.azienda && (i.stato !== 'Programmata' || (+i.km || 0) + (+i.kmExtra || 0) + (+i.altreSpese || 0) > 0)).sort((a, b) => (a.data || '').localeCompare(b.data || '')).map((i) => {
       const a = azOf(i.azienda);
       return { operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) };
     });
     const download = async () => {
       try {
-        const rr = notaRows(); if (!rr.length) return toast('Segna almeno un\'ispezione come Svolta');
+        const rr = notaRows(); if (!rr.length) return toast('Inserisci i km o segna almeno un\'ispezione come Svolta');
         await loadNotaTemplate();
         const bytes = Uint8Array.from(atob(window.NOTA_TEMPLATE), (c) => c.charCodeAt(0));
         const dates = rr.map((r) => r.data).filter(Boolean).sort();
@@ -1309,6 +1309,7 @@
     dlg.showModal();
   }
 
+  const periodoPerData = (d) => { const ps = rows('periodi').filter((p) => p.avvio && p.chiusura); return (ps.find((p) => d && d >= p.avvio && d <= p.chiusura) || {}).id || ''; };
   async function scaricaNota(rr) {
     try {
       if (!rr.length) return toast('Nessuna ispezione da inserire');
@@ -1389,15 +1390,16 @@
       const cards = ispAll.map((x) => {
         const out = { rimb: h('b', {}), somma: h('b', {}), tot: h('b', { class: 'tot' }) };
         const upd = () => { const c = ispCalc(x); out.rimb.textContent = eurTxt(c.rimb); out.somma.textContent = eurTxt(c.somma); out.tot.textContent = eurTxt(c.tot); imp.value = c.imp; totAll(); };
-        const touch = () => { x.updated = NOW(); save(); upd(); };
+        const touch = () => { if (!x.periodo) { const pid = periodoPerData(x.data); if (pid) { x.periodo = pid; per.value = pid; } } x.updated = NOW(); save(); upd(); };
         const num = (k, l, step) => h('label', { class: 'nf' }, h('small', {}, l), h('input', { type: 'number', inputmode: 'decimal', step, min: '0', value: x[k] == null || x[k] === '' ? '' : x[k], onchange: (e) => { const v = e.target.value.replace(',', '.'); x[k] = v === '' ? '' : Number(v); touch(); } }));
         const txt = (k, l, ph) => h('label', { class: 'nf w2' }, h('small', {}, l), h('input', { type: 'text', value: x[k] || '', placeholder: ph || '', onchange: (e) => { x[k] = e.target.value.trim(); touch(); } }));
+        const per = h('select', { onchange: (e) => { x.periodo = e.target.value; touch(); } }, h('option', { value: '' }, '— nessuno —'), rows('periodi').slice().sort((p, q) => (q.avvio || '').localeCompare(p.avvio || '')).map((p) => h('option', { value: p.id }, lab('periodi', p.id)))); per.value = x.periodo || '';
         const comp = h('select', { onchange: (e) => { x.complessita = e.target.value; if (L.TARIFFE[x.complessita] != null) x.compenso = L.TARIFFE[x.complessita]; touch(); } }, h('option', { value: '' }, '—'), Object.keys(L.TARIFFE).map((k) => h('option', { value: k }, k + ' (' + L.TARIFFE[k] + ' €)'))); comp.value = x.complessita || '';
         const imp = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: importoOf(x), onchange: (e) => { const v = e.target.value.replace(',', '.'); if (v === '') delete x.compenso; else x.compenso = Number(v); touch(); } });
         const c0 = ispCalc(x); out.rimb.textContent = eurTxt(c0.rimb); out.somma.textContent = eurTxt(c0.somma); out.tot.textContent = eurTxt(c0.tot); cs.push(x);
-        return h('div', { class: 'ns' }, h('div', { class: 'ns-h' }, h('b', {}, x.data ? L.fmtDate(x.data) : 'senza data'), tag(x.stato, CL[x.stato]), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica scheda')),
+        return h('div', { class: 'ns' }, h('div', { class: 'ns-h' }, h('b', {}, x.data ? L.fmtDate(x.data) : 'senza data'), tag(x.stato, CL[x.stato]), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, '→ vai al periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica scheda')),
           h('div', { class: 'ns-g' }, txt('partenza', 'Partenza', db.settings.partenza || ''), txt('destinazione', 'Destinazione', a.comune || ''), num('km', 'Km percorsi', '1'), num('kmExtra', 'Km extra', '1'), num('altreSpese', 'Autostrada / altre spese €', '0.01'),
-            h('label', { class: 'nf' }, h('small', {}, 'Complessità'), comp), h('label', { class: 'nf' }, h('small', {}, 'Importo ispezione €'), imp)),
+            h('label', { class: 'nf' }, h('small', {}, 'Complessità'), comp), h('label', { class: 'nf' }, h('small', {}, 'Importo ispezione €'), imp), h('label', { class: 'nf w2' }, h('small', {}, 'Periodo ispettivo (la nota spese confluisce qui)'), per)),
           h('div', { class: 'ns-t' }, h('span', {}, 'Rimborso km ', out.rimb), h('span', {}, 'Somma rimborso ', out.somma), h('span', {}, 'Totale ', out.tot)));
       });
       const tot = h('div', { class: 'ns-sum' });
@@ -1406,7 +1408,7 @@
       notaBox.replaceChildren(...(cards.length ? cards : [h('p', { class: 'note' }, 'Nessuna ispezione: usa “+ Ispezione” per aggiungerla e inserire km e autostrada.')]), tot);
     };
     drawNota();
-    const notaRowsAz = () => { const l = ispAll.filter((i) => i.stato !== 'Programmata'); return (l.length ? l : ispAll).slice().sort((x, y) => (x.data || '').localeCompare(y.data || '')).map((i) => ({ operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) })); };
+    const notaRowsAz = () => { const l = ispAll.filter((i) => i.stato !== 'Programmata' || (+i.km || 0) + (+i.kmExtra || 0) + (+i.altreSpese || 0) > 0); return (l.length ? l : ispAll).slice().sort((x, y) => (x.data || '').localeCompare(y.data || '')).map((i) => ({ operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) })); };
     return h('div', { class: 'az' }, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')),
       h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, tag(stage[0], stage[1]), a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune), lastContact && h('span', { class: 'pill' }, 'ultimo contatto ' + L.fmtDate(lastContact.data)))),
         h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('aziende', a), ''))),
@@ -1415,7 +1417,7 @@
       h('div', { class: 'az-quick' }, btn('✅ Contattata il…', () => openStatoRapido(a, 'contattata'), 'pri'), btn('📅 Ispezione fissata il…', () => openStatoRapido(a, 'fissata'), 'pri'), btn('🔔 Da richiamare', () => openAppuntoContatto(a), '')),
       banner,
       h('div', { class: 'az-cols' },
-        h('div', { class: 'az-main' }, h('div', { class: 'az-h' }, h('h3', {}, 'Nota spese'), h('div', { class: 'bar' }, btn('+ Ispezione', () => openForm('ispezioni', null, { azienda: id }), ''), btn('⬇️ Scarica Excel', () => scaricaNota(notaRowsAz()), 'pri'))), notaBox, h('div', { class: 'az-h' }, h('h3', {}, 'Attività', h('span', { class: 'az-n' }, items.length))),
+        h('div', { class: 'az-main' }, h('div', { class: 'az-h' }, h('h3', {}, 'Nota spese'), h('div', { class: 'bar' }, btn('+ Ispezione', () => openForm('ispezioni', null, { azienda: id, periodo: periodoPerData(L.today()) || undefined }), ''), btn('⬇️ Scarica Excel', () => scaricaNota(notaRowsAz()), 'pri'))), notaBox, h('div', { class: 'az-h' }, h('h3', {}, 'Attività', h('span', { class: 'az-n' }, items.length))),
           h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (flt === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.azf = k; route(); } }, l))), tl),
         h('aside', { class: 'az-aside' },
           card('Contatti', contacts.length ? h('div', { class: 'az-card' }, contacts) : h('p', { class: 'note' }, 'Aggiungi email e telefoni da “Modifica”.')),

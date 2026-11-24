@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -34,12 +34,12 @@
   }
 
   /* ---------- Definizione dati ---------- */
-  const TIPI_PRATICA = ['PAC / domanda unica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
+  const TIPI_PRATICA = ['PAC / domanda unica', 'Anagrafe apistica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
   const tipiPratica = () => { const base = db.settings && Array.isArray(db.settings.tipiPratica) && db.settings.tipiPratica.length ? db.settings.tipiPratica : TIPI_PRATICA; return [...new Set([...base, ...learnedOf('pratiche', 'tipo'), ...rows('pratiche').map((r) => (r.tipo || '').trim()).filter(Boolean)])]; };
   /* campi che «imparano»: un valore nuovo scritto a mano viene ricordato e proposto la volta dopo */
   const learnedOf = (ek, k) => { const l = db.settings && db.settings.learned && db.settings.learned[ek + '.' + k]; return Array.isArray(l) ? l : []; };
   const learn = (ek, k, v) => { const f = fieldOf(ENT[ek], k), known = new Set([...(f.list || (f.listFn && f.listFn()) || []), ...learnedOf(ek, k)].map((x) => String(x).toLowerCase())); if (known.has(String(v).toLowerCase())) return; db.settings.learned = db.settings.learned || {}; db.settings.learned[ek + '.' + k] = [...learnedOf(ek, k), v]; };
-  const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti'];
+  const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti', 'denunce'];
   const pratEco = (p) => {
     const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
     const compenso = +p.compenso || 0, speseR = sum('spesePratica', (x) => x.rimborsabile), speseC = sum('spesePratica', (x) => !x.rimborsabile), incassato = sum('pagamenti');
@@ -309,6 +309,17 @@
         { k: 'url', l: 'Link (Drive, iCloud, Dropbox, OneDrive…)', t: 'text' },
         { k: 'nota', l: 'Nota', t: 'text' }],
       title: (r) => (r.titolo || 'Documento') + ' – ' + lab('pratiche', r.pratica), cols: ['tipo', 'url'],
+    },
+    denunce: {
+      label: 'Denunce apistiche', one: 'denuncia', order: { k: 'anno', dir: 1 },
+      fields: [
+        { k: 'pratica', l: 'Pratica', t: 'ref', to: 'pratiche' },
+        { k: 'anno', l: 'Anno', t: 'number', step: '1' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', fmt: 'eur', def: 40 },
+        { k: 'pagato', l: 'Pagato', t: 'checkbox' },
+        { k: 'dataAgg', l: 'Data aggiornamento', t: 'date', def: 'today' },
+        { k: 'nota', l: 'Note pagamento', t: 'text' }],
+      title: (r) => 'Denuncia ' + (r.anno || '') + ' – ' + lab('pratiche', r.pratica), cols: ['anno', 'importo'],
     },
     fatture: {
       label: 'Fatture', one: 'fattura', order: { k: 'data', dir: -1 },
@@ -1821,9 +1832,25 @@
       h('span', { class: 'date' }, x.tipo === 'Cartella cloud' ? '📁' : '📄'), h('span', { class: 't' }, x.titolo || x.tipo || 'Documento', h('div', { class: 'note' }, [x.tipo, provider(x.url), x.nota].filter(Boolean).join(' · '))),
       btn('✏️', (ev) => { ev.stopPropagation(); openForm('documenti', x); }, 'sm')))) : h('p', { class: 'note' }, 'Collega la cartella della pratica sul cloud (Drive, iCloud, Dropbox…) e i documenti importanti.');
     const line = (ico, l, v, href) => v ? h('div', { class: 'az-l' }, h('span', { class: 'az-i' }, ico), h('div', {}, h('small', {}, l), href ? h('a', { href: href + v }, v) : h('span', {}, v))) : null;
+    const isApi = /apist|apicolt/i.test((p.tipo || '') + ' ' + (p.descrizione || ''));
+    const apiSec = () => {
+      const den = rows('denunce').filter((x) => x.pratica === id).sort((x, y) => (+x.anno || 0) - (+y.anno || 0)), nonPag = den.filter((x) => !x.pagato);
+      const inp = (k, l, ph, v) => h('label', { class: 'nf w2' }, h('small', {}, l), h('input', { type: 'text', value: v, placeholder: ph, onchange: (ev) => { p[k] = ev.target.value.trim(); p.updated = NOW(); save(); } }));
+      const attiva = h('input', { type: 'checkbox', checked: p.apAttiva !== false, onchange: (ev) => { p.apAttiva = ev.target.checked; p.updated = NOW(); save(); route(); } });
+      const ultimo = den[den.length - 1];
+      const tbl = den.length ? h('table', { class: 'g' }, h('thead', {}, h('tr', {}, ['Anno', 'Importo', 'Pagato?', 'Data aggiornamento', 'Note pagamento'].map((c) => h('th', {}, c)))),
+        h('tbody', {}, den.map((x) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('denunce', x) },
+          h('td', {}, String(x.anno || '')), h('td', {}, L.eur(+x.importo || 0)),
+          h('td', {}, h('button', { type: 'button', class: 'apy ' + (x.pagato ? 'si' : 'no'), title: 'Tocca per cambiare', onclick: (ev) => { ev.stopPropagation(); x.pagato = !x.pagato; x.dataAgg = L.today(); x.updated = NOW(); save(); route(); } }, h('i', {}, x.pagato ? '✓' : '✕'), x.pagato ? 'Sì' : 'No')),
+          h('td', {}, x.dataAgg ? L.fmtDate(x.dataAgg) : ''), h('td', {}, x.nota || ''))))) : h('p', { class: 'note' }, 'Nessuna denuncia registrata: usa «+ Nuova denuncia» per aggiungere l’anno.');
+      return h('section', { class: 'pr-sec api' }, h('div', { class: 'az-h' }, h('h3', {}, 'Anagrafe apistica', h('span', { class: 'az-n' }, den.length)), h('div', { class: 'bar' }, btn('+ Nuova denuncia', () => openForm('denunce', null, { pratica: id, anno: ultimo ? (+ultimo.anno || new Date().getFullYear()) + 1 : new Date().getFullYear(), importo: ultimo ? ultimo.importo : 40 }), 'pri'))),
+        h('div', { class: 'api-top' }, h('label', { class: 'api-sw' }, attiva, h('span', {}, 'Posizione attiva')), inp('apDenominazione', 'Denominazione', cl ? ENT.clienti.title(cl) : '', p.apDenominazione || (cl ? [cl.cognome, cl.nome].filter(Boolean).join(' ') : '')), inp('apCodice', 'Codice apistico', '123AL023', p.apCodice || '')),
+        h('h3', { class: 'api-h' }, 'Archivio denunce'), tbl,
+        nonPag.length ? h('p', { class: 'note' }, 'Da incassare: ' + nonPag.length + (nonPag.length === 1 ? ' denuncia' : ' denunce') + ' non pagat' + (nonPag.length === 1 ? 'a' : 'e') + ' (' + nonPag.map((x) => x.anno).join(', ') + ') · ' + L.eur(r2(nonPag.reduce((t, x) => t + (+x.importo || 0), 0)))) : null);
+    };
     const side = (title, content) => h('section', { class: 'az-side' }, h('div', { class: 'az-h' }, h('h3', {}, title)), content);
     const cli = cl ? [line('👤', 'Cliente', ENT.clienti.title(cl)), line('✉️', 'Email', cl.email, 'mailto:'), line('📱', 'Telefono', cl.telefono, 'tel:')].filter(Boolean) : [];
-    const dati = [line('📅', 'Scadenza', p.scadenza ? L.fmtDate(p.scadenza) : ''), line('📝', 'Descrizione', p.descrizione), line('📬', 'Cartella cloud', (doc.find((x) => x.tipo === 'Cartella cloud') || {}).titolo)].filter(Boolean);
+    const dati = [line('📅', 'Scadenza', p.scadenza ? L.fmtDate(p.scadenza) : ''), line('📝', 'Descrizione', p.descrizione), isApi && line('🐝', 'Codice apistico', p.apCodice), line('📬', 'Cartella cloud', (doc.find((x) => x.tipo === 'Cartella cloud') || {}).titolo)].filter(Boolean);
     return h('div', { class: 'az pr' }, h('p', {}, h('a', { href: '#/professione/pratiche' }, '← Pratiche')),
       h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '📁 ' + (p.tipo || 'Pratica')), h('div', { class: 'vtags' }, tag(p.stato || 'Da avviare', PCL[p.stato] || ''), cl && h('span', { class: 'pill' }, ENT.clienti.title(cl)), p.scadenza && tag('scade ' + L.fmtDate(p.scadenza), !done && p.scadenza < T ? 'warn' : ''))),
         h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('pratiche', p), ''))),
@@ -1834,6 +1861,7 @@
       e.dovuto > 0 ? h('div', {}, h('div', { class: 'sp-bar' }, h('i', { style: 'width:' + pct + '%' })), h('p', { class: 'note' }, 'Dovuto ' + L.eur(e.dovuto) + ' (compenso + spese da rimborsare) · incassato ' + Math.round(pct) + '%' + (e.speseC ? ' · spese a tuo carico ' + L.eur(e.speseC) : '') + (e.residuo < 0 ? ' · incassato oltre il dovuto di ' + L.eur(-e.residuo) : ''))) : h('p', { class: 'note' }, 'Inserisci il compenso da «Modifica» (o accetta un preventivo) per vedere il residuo.'),
       h('div', { class: 'az-cols' },
         h('div', { class: 'az-main' },
+          isApi ? apiSec() : null,
           sec('Pagamenti', pag.length, [btn('+ Acconto', () => prePag('Acconto'), ''), btn('+ Parziale', () => prePag('Pagamento parziale'), ''), btn('+ Saldo', () => prePag('Saldo', e.residuo), 'pri')], pagList),
           sec('Spese', spe.length, btn('+ Spesa', () => openForm('spesePratica', null, { pratica: id }), ''), speList),
           sec('Preventivi', prev.length, btn('+ Preventivo', () => openForm('preventivi', null, { pratica: id }), ''), preList),

@@ -761,7 +761,7 @@
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
-      mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label))),
+      mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label)), mod.id === 'ispezioni' && h('a', { class: 'chip', href: '#/ispezioni/mappa' }, '🗺️ Mappa')),
       extra, body);
   }
 
@@ -1221,6 +1221,65 @@
     body.append(h('div', { class: 'az-h' }, h('h3', {}, 'Movimenti', h('span', { class: 'az-n' }, mov.filter((m) => m.data && spPer(m.data) === key).length)), h('input', { type: 'search', placeholder: 'Cerca…', value: SP.q, oninput: (e) => { SP.q = e.target.value; draw(); } })), lst);
     draw();
     return root;
+  }
+
+  /* ---------- Mappa aziende (Leaflet + OpenStreetMap, posizioni da Nominatim) ---------- */
+  const MAP = { f: 'tutte', geoBusy: false };
+  const loadLeaflet = () => new Promise((ok, ko) => {
+    if (window.L && window.L.map) return ok(window.L);
+    if (!document.getElementById('leaflet-css')) { const l = document.createElement('link'); l.id = 'leaflet-css'; l.rel = 'stylesheet'; l.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.append(l); }
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = () => ok(window.L); s.onerror = () => ko(new Error('Mappa non disponibile: sei offline?')); document.head.append(s);
+  });
+  const azQuery = (a) => [a.ubicazione, a.comune, a.provincia, 'Italia'].filter(Boolean).join(', ');
+  async function geocodeAz(a, onStep) {
+    const tries = [azQuery(a), [a.comune, a.provincia, 'Italia'].filter(Boolean).join(', ')].filter((q, i, arr) => q && q !== 'Italia' && arr.indexOf(q) === i);
+    for (const q of tries) {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&accept-language=it&q=' + encodeURIComponent(q));
+      if (!r.ok) throw new Error('Servizio indirizzi non raggiungibile (' + r.status + ')');
+      const j = await r.json(); onStep && onStep();
+      if (j[0]) { a.lat = +(+j[0].lat).toFixed(6); a.lng = +(+j[0].lon).toFixed(6); a.geoq = q; a.geoApprox = q !== tries[0]; delete a.geoFail; a.updated = NOW(); save(); return true; }
+      await new Promise((ok) => setTimeout(ok, 1100));
+    }
+    a.geoFail = true; a.updated = NOW(); save(); return false;
+  }
+  function viewMappa() {
+    const T = L.today(), all = rows('aziende');
+    const prog = new Map(); for (const i of rows('ispezioni')) if (i.azienda && i.stato === 'Programmata' && i.data && i.data >= T && (!prog.has(i.azienda) || i.data < prog.get(i.azienda))) prog.set(i.azienda, i.data);
+    const withPos = () => all.filter((a) => a.lat != null && a.lng != null);
+    const todo = () => all.filter((a) => (a.lat == null || a.lng == null) && !a.geoFail && (a.ubicazione || a.comune));
+    const status = h('p', { class: 'note' }), mapEl = h('div', { id: 'azmap', class: 'azmap' }), listEl = h('div');
+    let map = null, layer = null;
+    const FL = [['tutte', 'Tutte'], ['prog', 'Con ispezione programmata']];
+    const chips = h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (MAP.f === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); MAP.f = k; route(); } }, l)));
+    const gmaps = (a, dir) => 'https://www.google.com/maps/' + (dir ? 'dir/?api=1&destination=' : 'search/?api=1&query=') + a.lat + ',' + a.lng;
+    const draw = () => {
+      const pts = withPos().filter((a) => MAP.f !== 'prog' || prog.has(a.id));
+      status.textContent = pts.length + ' aziende sulla mappa' + (todo().length ? ' · ' + todo().length + ' da localizzare' : '') + (all.filter((a) => a.geoFail).length ? ' · ' + all.filter((a) => a.geoFail).length + ' senza risultato' : '') + '.';
+      if (map && layer) {
+        layer.clearLayers(); const bounds = [];
+        for (const a of pts) {
+          const p = prog.get(a.id), m = window.L.circleMarker([a.lat, a.lng], { radius: 9, weight: 2, color: '#fff', fillColor: p ? '#2f7d4a' : '#2b6cb0', fillOpacity: 0.95 });
+          const pop = h('div', { class: 'azpop' }, h('b', {}, a.ragione), h('div', {}, [a.ubicazione, a.comune].filter(Boolean).join(', ')), p ? h('div', {}, '📅 Ispezione ' + L.fmtDate(p)) : null, a.geoApprox ? h('div', { class: 'note' }, 'Posizione approssimata (solo comune)') : null,
+            h('div', { class: 'azpop-b' }, h('a', { href: '#/ispezioni/azienda/' + a.id }, 'Scheda'), h('a', { href: gmaps(a), target: '_blank', rel: 'noopener' }, 'Google Maps'), h('a', { href: gmaps(a, true), target: '_blank', rel: 'noopener' }, 'Indicazioni')));
+          m.bindPopup(pop); m.bindTooltip(a.ragione); m.addTo(layer); bounds.push([a.lat, a.lng]);
+        }
+        if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
+      }
+      listEl.replaceChildren(...pts.sort((x, y) => (x.comune || '').localeCompare(y.comune || '', 'it') || x.ragione.localeCompare(y.ragione, 'it')).map((a) => h('div', { class: 'row', tabindex: '0', onclick: () => { if (map) { map.setView([a.lat, a.lng], 14); window.scrollTo(0, 0); } } }, h('span', { class: 't' }, a.ragione, h('div', { class: 'note' }, [a.ubicazione, a.comune].filter(Boolean).join(', '))), prog.has(a.id) ? h('span', { class: 'tag' }, '📅 ' + L.fmtDate(prog.get(a.id))) : null, h('a', { href: gmaps(a, true), target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '➜'))));
+    };
+    const runGeo = async (force) => {
+      if (MAP.geoBusy) return; if (force) for (const a of all) { delete a.lat; delete a.lng; delete a.geoFail; delete a.geoApprox; }
+      const list = todo(); if (!list.length) return; MAP.geoBusy = true; let n = 0;
+      try {
+        for (const a of list) { if (!document.getElementById('azmap')) break; status.textContent = 'Localizzo le aziende… ' + (++n) + ' / ' + list.length + ' (' + a.ragione + ')'; await geocodeAz(a); draw(); await new Promise((ok) => setTimeout(ok, 1100)); }
+      } catch (e) { toast(e.message); } finally { MAP.geoBusy = false; if (!mapEl.isConnected && /ispezioni\/mappa/.test(location.hash)) route(); else if (document.getElementById('azmap')) draw(); }
+    };
+    const root = h('div', {}, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')), h('h2', {}, '🗺️ Mappa aziende'), chips,
+      h('div', { class: 'bar' }, btn('📍 Localizza le aziende mancanti', () => runGeo(false), 'pri'), btn('↻ Ricalcola tutte le posizioni', () => { if (confirm('Cancellare le posizioni salvate e ricalcolarle (richiede circa 1 secondo per azienda)?')) runGeo(true); }, '')), status,
+      h('div', { class: 'note' }, '🟢 ispezione programmata · 🔵 altre aziende. Tocca un pin per scheda, Google Maps e indicazioni.'), mapEl, h('h3', {}, 'Elenco'), listEl);
+    loadLeaflet().then((Lf) => { if (!document.getElementById('azmap')) return; map = Lf.map(mapEl, { zoomControl: true }).setView([44.95, 8.55], 9); Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); layer = Lf.layerGroup().addTo(map); draw(); if (todo().length) runGeo(false); })
+      .catch((e) => { status.textContent = e.message; draw(); });
+    draw(); return root;
   }
 
   function viewCorreggi(vid) {
@@ -1777,7 +1836,7 @@
     renderNav(mod.id);
     const app = document.getElementById('app');
     app.replaceChildren(mod.id === 'oggi' ? viewOggi() : mod.id === 'impostazioni' ? viewImpostazioni()
-      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && !ek ? viewSpese()
+      : mod.id === 'scuola' && ek === 'classe' ? viewClasse(arg) : mod.id === 'scuola' && ek === 'correggi' ? viewCorreggi(arg) : mod.id === 'scuola' && ek === 'verbale' ? viewVerbale(arg) : mod.id === 'spese' && !ek ? viewSpese() : mod.id === 'ispezioni' && ek === 'mappa' ? viewMappa()
       : mod.id === 'ispezioni' && ek === 'periodo' ? viewPeriodo(arg) : mod.id === 'ispezioni' && ek === 'azienda' ? viewAzienda(arg) : viewModule(mod, ek));
     fitTables(app);
   }

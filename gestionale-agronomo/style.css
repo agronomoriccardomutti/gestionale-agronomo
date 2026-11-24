@@ -266,3 +266,6 @@ tr.abs td.nm{opacity:1}
 .sp-tr{height:12px;background:var(--chip);border-radius:4px;overflow:hidden}.sp-tr i{display:block;height:100%;background:var(--pri);opacity:.7}
 .row .pos,b.pos{color:#2f7d4a}
 @media(max-width:560px){.sp-form .w2{grid-column:span 1}.sp-big{font-size:2rem}}
+
+.azmap{height:60vh;min-height:320px;border:1px solid var(--bd);border-radius:12px;margin:8px 0 14px;z-index:0}
+.azpop-b{display:flex;gap:10px;margin-top:6px}.azpop-b a{font-weight:600}

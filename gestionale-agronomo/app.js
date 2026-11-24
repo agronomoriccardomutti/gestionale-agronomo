@@ -851,6 +851,27 @@
     return h('div', {}, bar, listEl);
   }
 
+  /* Da incassare, diviso per categoria (tipo pratica) */
+  function viewIncassi() {
+    const cat = {};
+    for (const p of rows('pratiche')) {
+      const e = pratEco(p); let due = e.residuo;
+      if (!(e.dovuto > 0)) due = r2(rows('denunce').filter((x) => x.pratica === p.id && !x.pagato).reduce((t, x) => t + (+x.importo || 0), 0));
+      if (!(due > 0.004)) continue;
+      const k = (p.tipo || '').trim() || 'Senza categoria';
+      (cat[k] = cat[k] || { tot: 0, l: [] }).tot += due; cat[k].l.push({ p, due });
+    }
+    const fat = rows('fatture').filter((r) => !r.incassata && (+r.importo || 0) > 0);
+    const list = Object.entries(cat).sort((a, b) => b[1].tot - a[1].tot);
+    const totP = r2(list.reduce((t, [, c]) => t + c.tot, 0)), totF = r2(fat.reduce((t, r) => t + (+r.importo || 0), 0));
+    if (!list.length && !fat.length) return null;
+    const det = (title, tot, n, items) => h('details', { class: 'inc-c' }, h('summary', {}, h('span', { class: 't' }, title, h('span', { class: 'az-n' }, n)), h('b', {}, L.eur(r2(tot)))), h('div', { class: 'inc-l' }, items));
+    return h('section', { class: 'pr-sec inc' }, h('div', { class: 'az-h' }, h('h3', {}, '💶 Da incassare per categoria')),
+      list.map(([k, c]) => det(k, c.tot, c.l.length, c.l.sort((a, b) => b.due - a.due).map(({ p, due }) => h('a', { class: 'row', href: '#/professione/pratica/' + p.id }, h('span', { class: 't' }, lab('clienti', p.cliente) || '(senza cliente)', ' ', h('span', { class: 'note' }, p.stato || '')), h('b', {}, L.eur(due)))))),
+      fat.length ? det('Fatture emesse non incassate', totF, fat.length, fat.sort((a, b) => (a.scadPag || a.data || '').localeCompare(b.scadPag || b.data || '')).map((r) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('fatture', r) }, h('span', { class: 't' }, ENT.fatture.title(r), r.scadPag ? h('span', { class: 'note' }, ' · scad. ' + L.fmtDate(r.scadPag)) : null), h('b', {}, L.eur(+r.importo || 0))))) : null,
+      h('p', { class: 'note' }, 'Pratiche: ' + L.eur(totP) + ' (compenso + spese rimborsabili − incassi; per l\u2019anagrafe apistica senza compenso, denunce non pagate).' + (fat.length ? ' Le fatture sono elencate a parte: se una fattura copre una pratica già conteggiata, non sommarle.' : '')));
+  }
+
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
     const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
@@ -859,6 +880,7 @@
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
       SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
+      mod.id === 'professione' && viewIncassi(),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label)), mod.id === 'ispezioni' && h('a', { class: 'chip', href: '#/ispezioni/mappa' }, '🗺️ Mappa')),
       extra, body);
   }

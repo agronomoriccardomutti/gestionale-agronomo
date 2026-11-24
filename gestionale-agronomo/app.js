@@ -45,7 +45,7 @@
 
   const gmailSearch = (q) => 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
   const gmailCompose = (to, subj) => 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + (subj ? '&su=' + encodeURIComponent(subj) : '');
-  const gmailActions = [{ label: '✉️ Scrivi (Gmail)', show: (r) => !!r.email, href: (r) => gmailCompose(r.email) }, { label: '🔍 Mail in Gmail', show: (r) => !!(r.email || r.nome || r.ragione), href: (r) => gmailSearch(r.email ? 'from:' + r.email + ' OR to:' + r.email : '"' + (r.nome || r.ragione) + '"') }];
+  const gmailActions = [{ label: '✉️ Scrivi (Gmail)', show: (r) => !!r.email, href: (r) => gmailCompose(r.email) }, { label: '🔍 Mail in Gmail', show: (r) => !!(r.email || r.nome || r.cognome || r.ragione), href: (r) => gmailSearch(r.email ? 'from:' + r.email + ' OR to:' + r.email : '"' + ([r.cognome, r.nome].filter(Boolean).join(' ') || r.ragione) + '"') }];
   const SP_CAT = ['Spesa alimentare','Carburante','Manutenzione veicoli','Assicurazione/Bollo','Casa/Utenze','Telefono/Internet','Farmacia','Salute','Abbigliamento','Bar','Ristoranti/Svago','Regali','Libri/Cultura','Figlie','Abbonamenti','Rate/Finanziamenti','Tasse/Imposte','Altro'];
   const SP_CAT_ALL = SP_CAT.concat(['Stipendio', 'Consulenze agronomo', 'Rimborsi', 'Regali ricevuti', 'Altre entrate', 'Prelievo contanti']);
   const SP_VEI = ['Nissan', 'Jeep Compass', 'Africa Twin', 'Trattore Landini'];
@@ -221,13 +221,15 @@
     clienti: {
       label: 'Clienti', one: 'cliente', order: { k: 'nome', dir: 1 },
       fields: [
+        { k: 'titolo', l: 'Titolo', t: 'text', list: ['Sig.', 'Sig.ra', 'Dott.', 'Dott.ssa', 'Dott. Agr.', 'Ing.', 'Arch.', 'Geom.', 'Avv.', 'Prof.', 'Prof.ssa', 'Spett.le'] },
+        { k: 'cognome', l: 'Cognome', t: 'text' },
         { k: 'nome', l: 'Nome / ragione sociale', t: 'text', req: 1 },
         { k: 'telefono', l: 'Telefono', t: 'tel' },
         { k: 'email', l: 'Email', t: 'email' },
         { k: 'cfpiva', l: 'C.F. / P.IVA', t: 'text' },
         { k: 'indirizzo', l: 'Indirizzo', t: 'text' },
         { k: 'note', l: 'Note', t: 'textarea' }],
-      title: (r) => r.nome, cols: ['telefono', 'email'], actions: gmailActions,
+      title: (r) => [r.titolo, r.cognome, r.nome].filter(Boolean).join(' '), sortKey: (r) => r.cognome ? r.cognome + ' ' + (r.nome || '') : (r.nome || ''), cols: ['telefono', 'email'], actions: gmailActions,
     },
     pratiche: {
       label: 'Pratiche', one: 'pratica', order: { k: 'scadenza', dir: 1 },
@@ -737,7 +739,7 @@
       if (toks.length) list = list.filter((r) => { const hay = nz(ent.title(r) + ' ' + ent.fields.map((f) => disp(f, r[f.k])).join(' ')); return toks.every((t) => hay.includes(t)); });
       const { k, dir } = ent.order;
       list.sort((a, b) => {
-        const av = a[k] || '', bv = b[k] || '';
+        const av = ent.sortKey ? ent.sortKey(a) : a[k] || '', bv = ent.sortKey ? ent.sortKey(b) : b[k] || '';
         if (!av && bv) return 1; if (av && !bv) return -1;
         return String(av).localeCompare(String(bv), 'it') * dir;
       });

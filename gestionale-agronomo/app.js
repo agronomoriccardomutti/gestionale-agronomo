@@ -1836,7 +1836,6 @@
     const apiSec = () => {
       const den = rows('denunce').filter((x) => x.pratica === id).sort((x, y) => (+x.anno || 0) - (+y.anno || 0)), nonPag = den.filter((x) => !x.pagato);
       const inp = (k, l, ph, v) => h('label', { class: 'nf w2' }, h('small', {}, l), h('input', { type: 'text', value: v, placeholder: ph, onchange: (ev) => { p[k] = ev.target.value.trim(); p.updated = NOW(); save(); } }));
-      const attiva = h('input', { type: 'checkbox', checked: p.apAttiva !== false, onchange: (ev) => { p.apAttiva = ev.target.checked; p.updated = NOW(); save(); route(); } });
       const ultimo = den[den.length - 1];
       const tbl = den.length ? h('table', { class: 'g' }, h('thead', {}, h('tr', {}, ['Anno', 'Importo', 'Pagato?', 'Data aggiornamento', 'Note pagamento'].map((c) => h('th', {}, c)))),
         h('tbody', {}, den.map((x) => h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('denunce', x) },
@@ -1844,7 +1843,7 @@
           h('td', {}, h('button', { type: 'button', class: 'apy ' + (x.pagato ? 'si' : 'no'), title: 'Tocca per cambiare', onclick: (ev) => { ev.stopPropagation(); x.pagato = !x.pagato; x.dataAgg = L.today(); x.updated = NOW(); save(); route(); } }, h('i', {}, x.pagato ? '✓' : '✕'), x.pagato ? 'Sì' : 'No')),
           h('td', {}, x.dataAgg ? L.fmtDate(x.dataAgg) : ''), h('td', {}, x.nota || ''))))) : h('p', { class: 'note' }, 'Nessuna denuncia registrata: usa «+ Nuova denuncia» per aggiungere l’anno.');
       return h('section', { class: 'pr-sec api' }, h('div', { class: 'az-h' }, h('h3', {}, 'Anagrafe apistica', h('span', { class: 'az-n' }, den.length)), h('div', { class: 'bar' }, btn('+ Nuova denuncia', () => openForm('denunce', null, { pratica: id, anno: ultimo ? (+ultimo.anno || new Date().getFullYear()) + 1 : new Date().getFullYear(), importo: ultimo ? ultimo.importo : 40 }), 'pri'))),
-        h('div', { class: 'api-top' }, h('label', { class: 'api-sw' }, attiva, h('span', {}, 'Posizione attiva')), inp('apDenominazione', 'Denominazione', cl ? ENT.clienti.title(cl) : '', p.apDenominazione || (cl ? [cl.cognome, cl.nome].filter(Boolean).join(' ') : '')), inp('apCodice', 'Codice apistico', '123AL023', p.apCodice || '')),
+        h('div', { class: 'api-top' }, inp('apDenominazione', 'Denominazione', cl ? ENT.clienti.title(cl) : '', p.apDenominazione || (cl ? [cl.cognome, cl.nome].filter(Boolean).join(' ') : '')), inp('apCodice', 'Codice apistico', '123AL023', p.apCodice || '')),
         h('h3', { class: 'api-h' }, 'Archivio denunce'), tbl,
         nonPag.length ? h('p', { class: 'note' }, 'Da incassare: ' + nonPag.length + (nonPag.length === 1 ? ' denuncia' : ' denunce') + ' non pagat' + (nonPag.length === 1 ? 'a' : 'e') + ' (' + nonPag.map((x) => x.anno).join(', ') + ') · ' + L.eur(r2(nonPag.reduce((t, x) => t + (+x.importo || 0), 0)))) : null);
     };

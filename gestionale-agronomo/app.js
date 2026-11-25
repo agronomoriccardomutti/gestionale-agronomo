@@ -974,6 +974,58 @@
       h('p', { class: 'note' }, 'Pratiche: ' + L.eur(totP) + ' (compenso + spese rimborsabili − incassi; per l\u2019anagrafe apistica senza compenso, denunce non pagate).' + (fat.length ? ' Le fatture sono elencate a parte: se una fattura copre una pratica già conteggiata, non sommarle.' : '')));
   }
 
+  /* PDF unico per il commercialista: indice dei versamenti + tutte le ricevute allegate in sequenza */
+  async function pdfUnico(list, titolo) {
+    toast('Preparo il PDF…');
+    if (!window.PDFLib) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'vendor/pdf-lib.min.js'; sc.onload = res; sc.onerror = () => rej(new Error('libreria PDF non disponibile')); document.head.append(sc); });
+    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+    const items = list.slice().sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+    const san = (t) => String(t == null ? '' : t).replace(/[^\x20-\x7e\u00a0-\u00ff\u20ac\u2013\u2014\u2019\u2018\u201c\u201d]/g, '?');
+    const out = await PDFDocument.create(), F = await out.embedFont(StandardFonts.Helvetica), FB = await out.embedFont(StandardFonts.HelveticaBold);
+    // allegati
+    const att = [];
+    for (const r of items) {
+      const a = { r, pages: [], note: r.pdf ? '' : r.link ? 'solo link cloud' : 'senza allegato' };
+      if (r.pdf) {
+        try {
+          const blob = await FILES.get(r.id + ':pdf'); if (!blob) throw new Error('mancante');
+          const bytes = new Uint8Array(await blob.arrayBuffer()), ty = (r.pdf.type || blob.type || '').toLowerCase();
+          if (ty.includes('pdf') || /\.pdf$/i.test(r.pdf.name)) { const src = await PDFDocument.load(bytes, { ignoreEncryption: true }); a.pages = await out.copyPages(src, src.getPageIndices()); }
+          else { const img = /png/.test(ty) ? await out.embedPng(bytes) : await out.embedJpg(bytes); const sc = Math.min(535 / img.width, 782 / img.height, 1); a.img = { img, w: img.width * sc, hh: img.height * sc }; a.pages = [null]; }
+        } catch (e) { a.note = 'allegato non unibile (' + (e.message || e) + ')'; a.pages = []; }
+      }
+      att.push(a);
+    }
+    const ROWS = 34, nIdx = Math.max(1, Math.ceil(att.length / ROWS));
+    let pageNo = nIdx + 1; att.forEach((a) => { a.start = a.pages.length ? pageNo : 0; pageNo += a.pages.length; });
+    const tot = r2(items.reduce((t, r) => t + (+r.importo || 0), 0)), gr = {}; items.forEach((r) => { const g = vsGruppo(r.categoria); gr[g] = (gr[g] || 0) + (+r.importo || 0); });
+    const eu = (x) => L.eur(r2(x)).replace(/\s/g, ' ');
+    for (let p = 0; p < nIdx; p++) {
+      const pg = out.addPage([595, 842]); let y = 800;
+      if (p === 0) {
+        pg.drawText(san('Versamenti e spese professionali'), { x: 40, y, size: 18, font: FB }); y -= 22; pg.drawText(san(titolo + ' · generato il ' + L.fmtDate(L.today())), { x: 40, y, size: 10, font: F, color: rgb(0.35, 0.35, 0.35) }); y -= 18;
+        pg.drawText(san('Totale ' + eu(tot) + '   ·   ' + Object.entries(gr).map(([k, v]) => k + ' ' + eu(v)).join('   ·   ')), { x: 40, y, size: 10, font: FB }); y -= 26;
+      } else y -= 10;
+      const hdr = [['N.', 40], ['Data', 62], ['Categoria / descrizione', 125], ['Importo', 435], ['Pag.', 505]];
+      hdr.forEach(([t, x]) => pg.drawText(t, { x, y, size: 9, font: FB })); y -= 5; pg.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 0.7, color: rgb(0.2, 0.2, 0.2) }); y -= 14;
+      att.slice(p * ROWS, (p + 1) * ROWS).forEach((a, i) => {
+        const r = a.r, n = p * ROWS + i + 1, desc = [r.categoria, r.descrizione].filter(Boolean).join(' – ');
+        pg.drawText(String(n), { x: 40, y, size: 9, font: F }); pg.drawText(san(r.data ? L.fmtDate(r.data) : ''), { x: 62, y, size: 9, font: F });
+        let dd = san(desc); if (F.widthOfTextAtSize(dd, 9) > 300) { while (dd.length > 3 && F.widthOfTextAtSize(dd + '...', 9) > 300) dd = dd.slice(0, -1); dd += '...'; } pg.drawText(dd, { x: 125, y, size: 9, font: F }); pg.drawText(san(eu(+r.importo || 0)), { x: 435, y, size: 9, font: F });
+        pg.drawText(san(a.start ? String(a.start) : '—'), { x: 505, y, size: 9, font: F, color: a.start ? rgb(0, 0, 0) : rgb(0.6, 0.3, 0.1) });
+        if (a.note) { y -= 11; pg.drawText(san(a.note), { x: 125, y, size: 7.5, font: F, color: rgb(0.6, 0.3, 0.1) }); }
+        y -= 17;
+      });
+    }
+    for (const a of att) {
+      if (a.img) { const pg = out.addPage([595, 842]); pg.drawImage(a.img.img, { x: (595 - a.img.w) / 2, y: (842 - a.img.hh) / 2, width: a.img.w, height: a.img.hh }); }
+      else a.pages.forEach((pp) => out.addPage(pp));
+    }
+    const bytes = await out.save();
+    await deliver(bytes, 'Versamenti-' + String(titolo).replace(/\W+/g, '-').replace(/^-|-$/g, '') + '.pdf', 'application/pdf');
+    toast('PDF pronto: ' + out.getPageCount() + ' pagine');
+  }
+
   function viewVersamenti() {
     const all = rows('versamenti'), cur = String(new Date().getFullYear());
     const anni = [...new Set([cur, ...all.map(vsAnno).filter(Boolean)])].sort().reverse();
@@ -997,7 +1049,7 @@
         save(); route(); toast(add + ' versamenti importati (' + pdf + ' PDF)' + (dup ? ', ' + dup + ' già presenti' : ''));
       } catch (e) { toast('Importazione non riuscita: ' + e.message); }
     });
-    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuovo versamento', () => openForm('versamenti', null), 'pri'), btn('📥 Importa da file', () => fi.click(), ''), list.length ? btn('⬇️ Esporta CSV', csv, '') : null, fi),
+    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuovo versamento', () => openForm('versamenti', null), 'pri'), btn('📥 Importa da file', () => fi.click(), ''), list.length ? btn('⬇️ Esporta CSV', csv, '') : null, list.length ? btn('🖨️ PDF unico per il commercialista', () => pdfUnico(list, ui.vy === 'tutti' ? 'tutti gli anni' : ui.vy).catch((e) => toast('PDF non riuscito: ' + (e.message || e))), '') : null, fi),
       h('div', { class: 'chips' }, anni.concat(['tutti']).map((a) => h('a', { class: 'chip' + (ui.vy === a ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.vy = a; route(); } }, a === 'tutti' ? 'Tutti gli anni' : a))),
       tiles([['Totale pagato', L.eur(T)], ['Contributi (EPAP…)', L.eur(tot('Contributi'))], ['Imposte', L.eur(tot('Imposte'))], ['Altre spese', L.eur(tot('Spese'))]]),
       !list.length ? h('div', { class: 'empty' }, 'Nessun versamento' + (ui.vy === 'tutti' ? '' : ' nel ' + ui.vy) + '. Registra EPAP, assicurazione professionale, imposte e altre spese con «+ Nuovo versamento», e allega il PDF della ricevuta.') : h('div', {},

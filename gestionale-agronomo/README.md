@@ -156,3 +156,5 @@ Vista come il foglio «Conteggio Note Spese»: nota spese → fattura emessa →
 
 ## Versamenti (Professione → Versamenti)
 Registro dei pagamenti per tasse e spese professionali (EPAP, assicurazione professionale, imposta sostitutiva, ecc.) con totali per anno, per gruppo (Contributi / Imposte / Altre spese) e per categoria, export CSV e archivio della ricevuta PDF. I dati e i PDF restano solo sul dispositivo (`versamenti` in `localOnly`; i PDF stanno in IndexedDB e non sono nel backup JSON).
+
+«🖨️ PDF unico per il commercialista» (in Versamenti) genera un solo PDF: indice dei versamenti dell'anno scelto con numero di pagina + tutte le ricevute allegate in sequenza (PDF o foto). Usa la libreria MIT [pdf-lib](https://pdf-lib.js.org/) inclusa in `vendor/` (funziona offline).

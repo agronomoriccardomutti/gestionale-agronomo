@@ -268,7 +268,8 @@
         { k: 'compenso', l: 'Compenso (€)', t: 'number', step: '0.01', fmt: 'eur' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => (r.azienda ? lab('aziende', r.azienda) : 'Ispezione'),
-      cols: ['data', 'tipo', 'stato', 'pagamento'],
+      cols: ['data', 'stato', 'pagamento'],
+      dlg: { name: () => 'ispezione', skip: ['tipo', 'norma'], wide: true, chips: ['stato', 'pagamento'], rows: [['data', 'ora'], ['stato', 'pagamento'], ['periodo', 'dataCarico'], ['scadVerbale', 'campionamento'], ['km', 'kmExtra'], ['altreSpese', 'compenso'], ['destinazione', 'partenza']], sections: { data: 'Data e azienda', stato: 'Stato e pagamento', periodo: 'Gestionale e verbale', km: 'Spostamenti e compenso', note: 'Note' } },
       isDone: (r) => r.stato === 'Chiusa',
       events: (r) => {
         const az = r.azienda ? lab('aziende', r.azienda) : '';
@@ -688,6 +689,7 @@
         }
       }
       inputs[f.k] = el;
+      if (D && D.skip && D.skip.includes(f.k)) { el.hidden = true; form.append(el); continue; }
       if (D && D.hide && D.hide.includes(f.k) && r[f.k]) { el.hidden = true; form.append(el); continue; }
       let ctl = el;
       if (D && D.chips && D.chips.includes(f.k) && f.t === 'select') {
@@ -699,6 +701,8 @@
       wrap[f.k] = fl; form.append(fl);
     }
     if (D && D.rows) for (const pair of D.rows) { const ws = pair.map((k) => wrap[k]).filter(Boolean); if (ws.length === 2) { const row = h('div', { class: 'fld-row' }); ws[0].before(row); row.append(...ws); } }
+    if (D && D.sections) for (const k of Object.keys(D.sections)) { const w = wrap[k]; if (!w) continue; const t = w.parentElement && w.parentElement.classList.contains('fld-row') ? w.parentElement : w; t.before(h('h4', { class: 'dlg-sec' }, D.sections[k])); }
+    dlg.classList.toggle('wide', !!(D && D.wide));
     const close = () => dlg.close();
     form.append(h('div', { class: 'dlg-btns' },
       !isNew && h('button', { type: 'button', class: 'del', onclick: () => {
@@ -2298,6 +2302,7 @@
       for (const tr of t.querySelectorAll('tbody tr')) [...tr.children].forEach((td, k) => { if (labs[k] && !td.dataset.l) td.dataset.l = labs[k]; });
     }
   }
+  document.getElementById('dlg').addEventListener('close', () => document.getElementById('dlg').classList.remove('wide'));
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); route(); });
   route();
   startSync();

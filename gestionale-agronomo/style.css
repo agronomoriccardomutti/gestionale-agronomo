@@ -386,3 +386,13 @@ dialog::backdrop{background:rgba(15,25,18,.5);-webkit-backdrop-filter:blur(3px);
 .inc-c{border-top:1px solid var(--line,rgba(128,128,128,.2))}.inc-c summary{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 4px;cursor:pointer;list-style:none}.inc-c summary::-webkit-details-marker{display:none}.inc-c summary::before{content:'▸';margin-right:6px;color:var(--mut)}.inc-c[open] summary::before{content:'▾'}.inc-c summary .t{flex:1}.inc-l{padding:0 0 8px 14px}.inc-l .row{text-decoration:none;color:inherit}
 
 .ns-late{color:var(--bad,#c0392b);font-weight:700}.ns-todo{color:var(--warn,#b9770e);font-weight:600}.ns-ok{color:var(--ok,#1e8449);font-weight:600}.ns-wait{color:var(--mut)}
+
+/* finestre larghe e a sezioni (es. ispezione) */
+dialog.wide{width:min(860px,96vw);max-height:94vh}
+.dlg-sec{margin:10px 0 -2px;padding-top:12px;border-top:1px solid var(--bd);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);font-weight:700}
+.dlg-sec:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.dlg-c .fld input,.dlg-c .fld select,.dlg-c .fld textarea{width:100%;box-sizing:border-box}
+.dlg-c textarea{min-height:96px}
+dialog.wide .dlg-in{padding:26px 28px}
+dialog.wide .fld-row{grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){dialog.wide .dlg-in{padding:18px}.dlg-sec{margin-top:6px}}

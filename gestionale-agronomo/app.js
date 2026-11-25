@@ -983,7 +983,21 @@
     const byCat = {}; list.forEach((r) => { const k = (r.categoria || 'Senza categoria').trim(); (byCat[k] = byCat[k] || { n: 0, t: 0 }); byCat[k].n++; byCat[k].t += +r.importo || 0; });
     const cats = Object.entries(byCat).sort((a, b) => b[1].t - a[1].t), T = tot();
     const csv = () => { const q = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; deliver('\ufeffData;Categoria;Gruppo;Descrizione;Importo;Anno competenza;Allegato\n' + list.slice().reverse().map((r) => [r.data, r.categoria, vsGruppo(r.categoria), r.descrizione, String(r.importo || 0).replace('.', ','), vsAnno(r), r.pdf && r.pdf.name].map(q).join(';')).join('\n'), 'versamenti-' + ui.vy + '.csv', 'text/csv'); };
-    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuovo versamento', () => openForm('versamenti', null), 'pri'), list.length ? btn('⬇️ Esporta CSV', csv, '') : null),
+    const fi = h('input', { type: 'file', accept: '.json', hidden: true });
+    fi.addEventListener('change', async () => {
+      try {
+        const j = JSON.parse(await fi.files[0].text()); let add = 0, dup = 0, pdf = 0;
+        for (const it of (j.versamenti || [])) {
+          const { _file, ...rec } = it;
+          if (rows('versamenti').some((x) => x.data === rec.data && x.categoria === rec.categoria && +x.importo === +rec.importo)) { dup++; continue; }
+          rec.id = uid(); rec.updated = NOW();
+          if (_file && _file.b64) { const bin = atob(_file.b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); await FILES.put(rec.id + ':pdf', new Blob([u], { type: _file.type || 'application/pdf' })); rec.pdf = { name: _file.name, size: u.length, type: _file.type || 'application/pdf' }; pdf++; }
+          rows('versamenti').push(rec); add++;
+        }
+        save(); route(); toast(add + ' versamenti importati (' + pdf + ' PDF)' + (dup ? ', ' + dup + ' già presenti' : ''));
+      } catch (e) { toast('Importazione non riuscita: ' + e.message); }
+    });
+    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuovo versamento', () => openForm('versamenti', null), 'pri'), btn('📥 Importa da file', () => fi.click(), ''), list.length ? btn('⬇️ Esporta CSV', csv, '') : null, fi),
       h('div', { class: 'chips' }, anni.concat(['tutti']).map((a) => h('a', { class: 'chip' + (ui.vy === a ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.vy = a; route(); } }, a === 'tutti' ? 'Tutti gli anni' : a))),
       tiles([['Totale pagato', L.eur(T)], ['Contributi (EPAP…)', L.eur(tot('Contributi'))], ['Imposte', L.eur(tot('Imposte'))], ['Altre spese', L.eur(tot('Spese'))]]),
       !list.length ? h('div', { class: 'empty' }, 'Nessun versamento' + (ui.vy === 'tutti' ? '' : ' nel ' + ui.vy) + '. Registra EPAP, assicurazione professionale, imposte e altre spese con «+ Nuovo versamento», e allega il PDF della ricevuta.') : h('div', {},

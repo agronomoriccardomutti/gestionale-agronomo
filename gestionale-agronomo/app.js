@@ -2053,14 +2053,15 @@
     const ICO = { Contattata: '✅', 'Ispezione fissata': '📅', Chiamata: '📞', Email: '✉️', Messaggio: '💬', Visita: '🚗', Nota: '📝' };
     const items = [];
     for (const x of att) items.push({ k: 'c', d: x.data, ico: ICO[x.tipo] || '📝', t: x.tipo, x: x.testo, go: () => openForm('attivita', x) });
-    for (const i of isp) items.push({ k: 'i', d: i.data, ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: 'Carico ' + (i.dataCarico ? L.fmtDate(i.dataCarico) : '—') + (i.periodo ? ' · ' + lab('periodi', i.periodo) : ''), st: i.stato, go: () => openForm('ispezioni', i) });
+    for (const i of isp) items.push({ k: 'i', d: i.data, ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: [i.dataCarico ? 'Carico ' + L.fmtDate(i.dataCarico) : '', i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '), st: i.stato, go: () => openForm('ispezioni', i) });
     for (const p of appunti) items.push({ k: 'a', d: p.data, ico: p.stato === 'Fatto' ? '✅' : '🔔', t: p.titolo, x: (p.note || '').split('\n').slice(1).join(' · '), st: p.stato === 'Fatto' ? 'Fatto' : 'Aperto', go: () => openForm('promemoria', p) });
     items.sort((x, y) => (y.d || '9999').localeCompare(x.d || '9999'));
     const flt = ui.azf || '';
     const FL = [['', 'Tutto'], ['c', 'Contatti'], ['i', 'Ispezioni'], ['a', 'Appunti']];
     const shown = items.filter((x) => !flt || x.k === flt);
-    const tl = shown.length ? h('div', { class: 'tl' }, shown.map((x) => h('div', { class: 'tl-i' + (x.d && x.d > T ? ' fut' : ''), tabindex: '0', onclick: x.go },
+    const mkTl = (arr) => arr.length ? h('div', { class: 'tl' }, arr.map((x) => h('div', { class: 'tl-i' + (x.d && x.d > T ? ' fut' : ''), tabindex: '0', onclick: x.go },
       h('span', { class: 'tl-dot' }, x.ico), h('div', { class: 'tl-b' }, h('div', { class: 'tl-t' }, h('b', {}, x.t), x.st && tag(x.st, CL[x.st] || (x.st === 'Aperto' ? 'warn' : ''))), h('small', {}, (x.d ? L.fmtDate(x.d) : 'senza data') + (x.x ? ' · ' : ''), x.x || ''))))) : h('p', { class: 'note' }, 'Nessuna attività registrata.');
+    const tl = mkTl(shown);
     // nota spese per ispezione
     const ispAll = isp.slice().sort((x, y) => (y.data || '').localeCompare(x.data || ''));
     const eurTxt = (n) => L.eur(n);
@@ -2068,16 +2069,17 @@
     const drawNota = () => {
       const cs = [];
       const cards = ispAll.map((x) => {
-        const out = { rimb: h('b', {}), somma: h('b', {}), tot: h('b', { class: 'tot' }) };
-        const upd = () => { const c = ispCalc(x); out.rimb.textContent = eurTxt(c.rimb); out.somma.textContent = eurTxt(c.somma); out.tot.textContent = eurTxt(c.tot); imp.value = c.imp; totAll(); };
+        const out = { rimb: h('b', {}), somma: h('b', {}), tot: h('b', { class: 'tot' }), tot2: h('b', { class: 'tot' }) };
+        const upd = () => { const c = ispCalc(x); out.tot2.textContent = eurTxt(c.tot); out.rimb.textContent = eurTxt(c.rimb); out.somma.textContent = eurTxt(c.somma); out.tot.textContent = eurTxt(c.tot); imp.value = c.imp; totAll(); };
         const touch = () => { if (!x.periodo) { const pid = periodoPerData(x.data); if (pid) { x.periodo = pid; per.value = pid; } } x.updated = NOW(); save(); upd(); };
         const num = (k, l, step) => h('label', { class: 'nf' }, h('small', {}, l), h('input', { type: 'number', inputmode: 'decimal', step, min: '0', value: x[k] == null || x[k] === '' ? '' : x[k], onchange: (e) => { const v = e.target.value.replace(',', '.'); x[k] = v === '' ? '' : Number(v); touch(); } }));
         const txt = (k, l, ph) => h('label', { class: 'nf w2' }, h('small', {}, l), h('input', { type: 'text', value: x[k] || '', placeholder: ph || '', onchange: (e) => { x[k] = e.target.value.trim(); touch(); } }));
         const per = h('select', { onchange: (e) => { x.periodo = e.target.value; touch(); } }, h('option', { value: '' }, '— nessuno —'), rows('periodi').slice().sort((p, q) => (q.avvio || '').localeCompare(p.avvio || '')).map((p) => h('option', { value: p.id }, lab('periodi', p.id)))); per.value = x.periodo || '';
         const comp = h('select', { onchange: (e) => { x.complessita = e.target.value; if (L.TARIFFE[x.complessita] != null) x.compenso = L.TARIFFE[x.complessita]; touch(); } }, h('option', { value: '' }, '—'), Object.keys(L.TARIFFE).map((k) => h('option', { value: k }, k + ' (' + L.TARIFFE[k] + ' €)'))); comp.value = x.complessita || '';
         const imp = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: importoOf(x), onchange: (e) => { const v = e.target.value.replace(',', '.'); if (v === '') delete x.compenso; else x.compenso = Number(v); touch(); } });
-        const c0 = ispCalc(x); out.rimb.textContent = eurTxt(c0.rimb); out.somma.textContent = eurTxt(c0.somma); out.tot.textContent = eurTxt(c0.tot); cs.push(x);
-        return h('div', { class: 'ns' }, h('div', { class: 'ns-h' }, h('b', {}, x.data ? L.fmtDate(x.data) : 'senza data'), tag(x.stato, CL[x.stato]), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, '→ vai al periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica scheda')),
+        const c0 = ispCalc(x); out.rimb.textContent = eurTxt(c0.rimb); out.somma.textContent = eurTxt(c0.somma); out.tot.textContent = eurTxt(c0.tot); out.tot2.textContent = eurTxt(c0.tot); cs.push(x);
+        const aperta = ispAll.length === 1 || x.stato === 'Programmata' || (x.data || '') >= T;
+        return h('details', { class: 'ns', open: aperta ? '' : null }, h('summary', { class: 'ns-h' }, h('b', {}, x.data ? L.fmtDate(x.data) : 'senza data'), tag(x.stato, CL[x.stato]), h('span', { class: 'ns-sum1' }, out.tot2), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, 'periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica')),
           h('div', { class: 'ns-g' }, txt('partenza', 'Partenza', db.settings.partenza || ''), txt('destinazione', 'Destinazione', a.comune || ''), num('km', 'Km percorsi', '1'), num('kmExtra', 'Km extra', '1'), num('altreSpese', 'Autostrada / altre spese €', '0.01'),
             h('label', { class: 'nf' }, h('small', {}, 'Complessità'), comp), h('label', { class: 'nf' }, h('small', {}, 'Importo ispezione €'), imp), h('label', { class: 'nf w2' }, h('small', {}, 'Periodo ispettivo (la nota spese confluisce qui)'), per)),
           h('div', { class: 'ns-t' }, h('span', {}, 'Rimborso km ', out.rimb), h('span', {}, 'Somma rimborso ', out.somma), h('span', {}, 'Totale ', out.tot)));
@@ -2089,21 +2091,23 @@
     };
     drawNota();
     const notaRowsAz = () => { const l = ispAll.filter((i) => i.stato !== 'Programmata' || (+i.km || 0) + (+i.kmExtra || 0) + (+i.altreSpese || 0) > 0); return (l.length ? l : ispAll).slice().sort((x, y) => (x.data || '').localeCompare(y.data || '')).map((i) => ({ operatore: a.ragione || '', codice: a.codice || '', data: i.data, partenza: i.partenza || db.settings.partenza || '', destinazione: i.destinazione || a.comune || '', km: i.km, kmExtra: i.kmExtra, altre: i.altreSpese, complessita: i.complessita || '', importo: importoOf(i) })); };
+    const tab = ui.azt || 'riep', TABS = [['riep', 'Riepilogo'], ['nota', 'Nota spese · ' + ispAll.length], ['att', 'Attività · ' + items.length]];
+    const tabs = h('div', { class: 'chips az-tabs' }, TABS.map(([k, l]) => h('a', { class: 'chip' + (tab === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.azt = k; route(); } }, l)));
+    const notaTab = h('div', {}, h('div', { class: 'az-h' }, h('h3', {}, 'Nota spese'), h('div', { class: 'bar' }, btn('+ Ispezione', () => openForm('ispezioni', null, { azienda: id, periodo: periodoPerData(L.today()) || undefined }), ''), btn('⬇️ Scarica Excel', () => scaricaNota(notaRowsAz()), 'pri'))), notaBox);
+    const attTab = h('div', {}, h('div', { class: 'az-h' }, h('h3', {}, 'Attività', h('span', { class: 'az-n' }, items.length)), h('div', { class: 'bar' }, btn('📝 Nota', () => openForm('attivita', null, { azienda: id, tipo: 'Nota' }), ''))),
+      h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (flt === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.azf = k; route(); } }, l))), tl);
+    const riepTab = h('div', { class: 'az-cols' },
+      h('div', { class: 'az-main' }, h('div', { class: 'az-h' }, h('h3', {}, 'Ultime attività'), items.length > 4 ? h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); ui.azt = 'att'; route(); } }, 'vedi tutte (' + items.length + ')') : null), mkTl(items.slice(0, 4))),
+      h('aside', { class: 'az-aside' },
+        card('Contatti', contacts.length ? h('div', { class: 'az-card' }, contacts) : h('p', { class: 'note' }, 'Aggiungi email e telefoni da “Modifica”.')),
+        card('Dati azienda', dati.length ? h('div', { class: 'az-card' }, dati) : h('p', { class: 'note' }, '—')),
+        a.note && card('Note', h('p', { class: 'az-note' }, a.note))));
     return h('div', { class: 'az' }, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')),
-      h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, tag(stage[0], stage[1]), a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune), lastContact && h('span', { class: 'pill' }, 'ultimo contatto ' + L.fmtDate(lastContact.data)))),
+      h('div', { class: 'az-top' }, h('div', {}, h('h2', {}, '🏢 ' + a.ragione), h('div', { class: 'vtags' }, tag(stage[0], stage[1]), a.codice && h('span', { class: 'pill' }, a.codice), a.comune && h('span', { class: 'pill' }, a.comune + (a.provincia ? ' (' + a.provincia + ')' : '')), lastContact && h('span', { class: 'pill' }, 'ultimo contatto ' + L.fmtDate(lastContact.data)))),
         h('div', { class: 'bar' }, btn('✏️ Modifica', () => openForm('aziende', a), ''))),
-      h('div', { class: 'bar az-act' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: gmailCompose(a.email), target: '_blank', rel: 'noopener' }, '✉️ Scrivi (Gmail)'), h('a', { class: 'btnlink', href: gmailSearch(a.email ? 'from:' + a.email + ' OR to:' + a.email : '"' + a.ragione + '"'), target: '_blank', rel: 'noopener' }, '🔍 Mail in Gmail'),
-        btn('📝 Nota', () => openForm('attivita', null, { azienda: id, tipo: 'Nota' }), '')),
-      h('div', { class: 'az-quick' }, btn('✅ Contattata il…', () => openStatoRapido(a, 'contattata'), 'pri'), btn('📅 Ispezione fissata il…', () => openStatoRapido(a, 'fissata'), 'pri'), btn('🔔 Da richiamare', () => openAppuntoContatto(a), '')),
-      banner,
-      h('div', { class: 'az-cols' },
-        h('div', { class: 'az-main' }, h('div', { class: 'az-h' }, h('h3', {}, 'Nota spese'), h('div', { class: 'bar' }, btn('+ Ispezione', () => openForm('ispezioni', null, { azienda: id, periodo: periodoPerData(L.today()) || undefined }), ''), btn('⬇️ Scarica Excel', () => scaricaNota(notaRowsAz()), 'pri'))), notaBox, h('div', { class: 'az-h' }, h('h3', {}, 'Attività', h('span', { class: 'az-n' }, items.length))),
-          h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (flt === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.azf = k; route(); } }, l))), tl),
-        h('aside', { class: 'az-aside' },
-          card('Contatti', contacts.length ? h('div', { class: 'az-card' }, contacts) : h('p', { class: 'note' }, 'Aggiungi email e telefoni da “Modifica”.')),
-          card('Dati azienda', dati.length ? h('div', { class: 'az-card' }, dati) : h('p', { class: 'note' }, '—')),
-          a.note && card('Note', h('p', { class: 'az-note' }, a.note)),
-          )));
+      h('div', { class: 'bar az-act' }, tel && h('a', { class: 'btnlink pri', href: 'tel:' + tel }, '📞 Chiama'), a.email && h('a', { class: 'btnlink', href: gmailCompose(a.email), target: '_blank', rel: 'noopener' }, '✉️ Scrivi'), h('a', { class: 'btnlink', href: gmailSearch(a.email ? 'from:' + a.email + ' OR to:' + a.email : '"' + a.ragione + '"'), target: '_blank', rel: 'noopener' }, '🔍 Mail'),
+        h('span', { class: 'az-sep' }), btn('✅ Contattata il…', () => openStatoRapido(a, 'contattata'), ''), btn('📅 Ispezione fissata il…', () => openStatoRapido(a, 'fissata'), ''), btn('🔔 Da richiamare', () => openAppuntoContatto(a), '')),
+      banner, tabs, tab === 'nota' ? notaTab : tab === 'att' ? attTab : riepTab);
   }
 
   /* ---------- Nota spese ispettori (modello EcoGruppo) ---------- */

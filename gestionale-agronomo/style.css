@@ -398,3 +398,17 @@ dialog.wide .fld-row{grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:560px){dialog.wide .dlg-in{padding:18px}.dlg-sec{margin-top:6px}}
 
 .az-q{width:100%;box-sizing:border-box;margin:6px 0 10px}.gz{border:0;background:transparent;box-shadow:none;padding:2px 8px;font-size:16px;border-radius:8px}.gz:hover{background:var(--chip)}
+
+/* scheda azienda: schede, azioni compatte, nota spese allineata */
+.az-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.az-sep{flex:0 0 1px;align-self:stretch;background:var(--bd);margin:0 4px}
+.az-tabs{margin:14px 0 16px;gap:8px}.az-tabs .chip{padding:9px 16px;font-size:15px}
+details.ns{padding:0}.ns>summary{list-style:none;cursor:pointer;padding:12px 14px;margin:0}.ns>summary::-webkit-details-marker{display:none}
+.ns>summary::before{content:'▸';color:var(--mut)}.ns[open]>summary::before{content:'▾'}
+.ns-h{flex-wrap:nowrap;gap:10px}.ns-h .ns-sum1{margin-left:auto}.ns-h a{margin-left:0;font-size:13px}.ns-h .ns-sum1 .tot{font-size:16px;color:var(--pri)}
+.ns[open]>summary{border-bottom:1px solid var(--bd);margin-bottom:12px}
+.ns>.ns-g,.ns>.ns-t{margin-left:14px;margin-right:14px}.ns>.ns-t{margin-bottom:12px}
+.ns-g{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px 14px;align-items:end}
+.nf small{min-height:2.4em;display:flex;align-items:flex-end;line-height:1.2}
+.ns-g .nf input,.ns-g .nf select{height:42px}
+.ns-g .nf.w2{grid-column:span 2}
+@media(max-width:520px){.ns-g{grid-template-columns:1fr 1fr}.ns-g .nf.w2{grid-column:1/-1}.ns-h{flex-wrap:wrap}.az-sep{display:none}}

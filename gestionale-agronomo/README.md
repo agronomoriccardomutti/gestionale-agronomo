@@ -150,3 +150,6 @@ Opzionale. In Impostazioni › «Mail dei clienti» si incolla l'ID client OAuth
 
 ### Scheda pratica
 Toccando una pratica si apre la sua scheda: compenso, spese da rimborsare, incassato e residuo; **pagamenti** (acconti, parziali, saldo), **spese** (da rimborsare o a tuo carico), **preventivi** (con «Usa come compenso» sull'accettato), **documenti e cartelle cloud** (link a Drive/iCloud/Dropbox/OneDrive) e «Crea fattura» con il residuo. Lo stato è un menu colorato direttamente sulla lista. Importi di pagamenti, spese e preventivi restano solo sul dispositivo (`localOnly`), come le fatture.
+
+## Fatturazione note spese (Ispezioni → Fatturazione)
+Vista come il foglio «Conteggio Note Spese»: nota spese → fattura emessa → 60 giorni → pagamento, con EPAP 4% e bollo. Mostra «SOLLECITARE» dopo 60 giorni e i giorni trascorsi dalle note non ancora fatturate. I dati restano solo sul dispositivo (`noteSpese` in `localOnly`). «Importa dal foglio Excel» legge il file .xlsx con le stesse colonne.

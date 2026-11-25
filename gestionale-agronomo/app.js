@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -61,6 +61,19 @@
   const GG_PAG = () => +(db.settings && db.settings.giorniPag) || 60;
   const scadFatt = (r) => r.scadPag || (r.data ? L.addDays(r.data, GG_PAG()) : '');
   const fattStato = (r) => { if (r.incassata) return null; const sc = scadFatt(r); if (!sc) return null; const d = L.diffDays(L.today(), sc); return { sc, d, late: d < 0 }; };
+  /* Fatturazione note spese EcoGruppo (come il foglio «Conteggio Note Spese») */
+  const nsCalc = (r) => {
+    const rimb = r2((+r.rimborsoKm || 0) + (+r.autostrada || 0)), tot = r2(rimb + (+r.ispezioni || 0));
+    const epap = r.noEpap ? 0 : r2(tot * 0.04), bollo = !(tot > 0) ? 0 : r.bollo === undefined || r.bollo === '' || r.bollo === null ? 2 : +r.bollo || 0;
+    return { rimb, tot, epap, bollo, totFatt: r2(tot + epap + bollo) };
+  };
+  const nsStato = (r) => {
+    const T = L.today();
+    if (r.pagamentoData) return { k: 'ok', t: 'Pagata' };
+    if (r.fatturaData) { const d = L.diffDays(r.fatturaData, T); return d > 60 ? { k: 'late', t: 'SOLLECITARE (passati ' + d + ' gg)' } : { k: 'wait', t: d + ' giorni trascorsi · scade tra ' + (60 - d) }; }
+    if (r.dataNota) return { k: 'todo', t: 'Da fatturare · ' + L.diffDays(r.dataNota, T) + ' giorni dalla nota' };
+    return { k: 'wait', t: '' };
+  };
   const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti', 'denunce'];
   const pratEco = (p) => {
     const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
@@ -214,6 +227,22 @@
         { k: 'epap', l: 'Applica EPAP 4% sugli importi delle ispezioni', t: 'checkbox' }],
       title: (r) => (r.anno || '') + ' · ' + L.fmtDate(r.avvio) + ' – ' + L.fmtDate(r.chiusura), cols: ['anno', 'avvio', 'chiusura'],
       onDelete: (r) => { dropWhere('piano', (x) => x.periodo === r.id); dropWhere('ispezioni', (x) => x.periodo === r.id); },
+    },
+    noteSpese: {
+      label: 'Fatturazione', one: 'nota spese', order: { k: 'dataNota', dir: 1 },
+      fields: [
+        { k: 'numero', l: 'N. nota spese', t: 'text' },
+        { k: 'dataNota', l: 'Data nota spese', t: 'date', def: 'today' },
+        { k: 'rimborsoKm', l: 'Rimborso km (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'autostrada', l: 'Autostrada (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'ispezioni', l: 'Ispezioni (€)', t: 'number', step: '0.01', fmt: 'eur' },
+        { k: 'fatturaData', l: 'Fattura emessa il', t: 'date', hint: 'Lasciala vuota finché non emetti la fattura.' },
+        { k: 'pagamentoData', l: 'Data pagamento', t: 'date', hint: 'Compila quando vieni pagato.' },
+        { k: 'noEpap', l: 'Senza EPAP 4%', t: 'checkbox' },
+        { k: 'bollo', l: 'Bollo (€)', t: 'number', step: '0.01', hint: 'Se vuoto: 2,00 €.' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => 'Nota spese ' + (r.numero || ''), cols: ['dataNota'],
+      events: (r) => (r.fatturaData && !r.pagamentoData ? [{ date: L.addDays(r.fatturaData, 60), title: 'Incasso nota spese ' + (r.numero || '') + ' (' + L.eur(nsCalc(r).totFatt) + ') – da sollecitare' }] : []),
     },
     piano: { label: 'Piano', one: 'voce del piano', order: { k: 'updated', dir: -1 }, fields: [], title: (r) => lab('aziende', r.azienda), cols: [] },
     ispezioni: {
@@ -525,7 +554,7 @@
     { id: 'oggi', label: 'Oggi', icon: '📅' },
     { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
-    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni'] },
+    { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
     { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
@@ -898,7 +927,7 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
@@ -1678,6 +1707,47 @@
 
   /* ---------- Periodi (trimestri), scheda periodo e scheda azienda ---------- */
   const tag = (txt, c) => h('span', { class: 'pill', 'data-c': c || '' }, txt);
+
+  function viewNoteSpese() {
+    const list = rows('noteSpese').slice().sort((a, b) => (a.dataNota || '').localeCompare(b.dataNota || '') || String(a.numero || '').localeCompare(String(b.numero || ''), 'it', { numeric: true }));
+    const fi = h('input', { type: 'file', accept: '.xlsx', hidden: true });
+    const ser = (v) => (typeof v === 'number' && v > 20000 ? L.addDays('1899-12-30', Math.round(v)) : /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : '');
+    fi.addEventListener('change', async () => {
+      try {
+        if (typeof DecompressionStream === 'undefined') throw new Error('Browser troppo vecchio');
+        const c = await L.xlsxCells(await fi.files[0].arrayBuffer()), col = {};
+        Object.keys(c).filter((k) => /^[A-Z]+1$/.test(k)).forEach((k) => { col[String(c[k]).trim().toLowerCase()] = k.replace(/\d/g, ''); });
+        const need = ['nota spese', 'data nota spese']; if (need.some((n) => !col[n])) throw new Error('Non riconosco le colonne del foglio (servono «Nota Spese» e «Data Nota Spese»)');
+        const nrows = [...new Set(Object.keys(c).map((k) => +k.replace(/\D/g, '')))].filter((n) => n > 1).sort((a, b) => a - b);
+        const v = (n, name) => (col[name] ? c[col[name] + n] : undefined), num = (x) => (typeof x === 'number' ? r2(x) : undefined);
+        let add = 0, dup = 0;
+        for (const n of nrows) {
+          const numero = v(n, 'nota spese') == null ? '' : String(v(n, 'nota spese')).trim(), dn = ser(v(n, 'data nota spese'));
+          if (!numero || !dn) continue;
+          if (rows('noteSpese').some((x) => String(x.numero) === numero)) { dup++; continue; }
+          rows('noteSpese').push({ id: uid(), numero, dataNota: dn, rimborsoKm: num(v(n, 'rimborso km')), autostrada: num(v(n, 'autostrada')), ispezioni: num(v(n, 'ispezioni')), fatturaData: ser(v(n, 'fattura emessa')), pagamentoData: ser(v(n, 'data pagamento')), updated: NOW() }); add++;
+        }
+        save(); route(); toast(add + ' note importate' + (dup ? ' (' + dup + ' già presenti)' : ''));
+      } catch (e) { toast('Errore: ' + e.message); }
+    });
+    const root = h('div', {}, h('div', { class: 'bar' }, btn('+ Nuova nota spese', () => openForm('noteSpese', null, { numero: String(list.length + 1).padStart(2, '0') }), 'pri'), btn('📥 Importa dal foglio Excel', () => fi.click(), ''), fi));
+    if (!list.length) { root.append(h('div', { class: 'empty' }, 'Nessuna nota spese. Aggiungila con «+ Nuova nota spese» oppure importa il tuo foglio «Conteggio Note Spese» (.xlsx).')); return root; }
+    const T = { rimb: 0, km: 0, aut: 0, isp: 0, tot: 0, epap: 0, bollo: 0, fatt: 0 }, dafatt = list.filter((r) => !r.fatturaData), attesa = list.filter((r) => r.fatturaData && !r.pagamentoData), soll = attesa.filter((r) => nsStato(r).k === 'late');
+    root.append(tiles([['Da fatturare', dafatt.length + ' · ' + L.eur(r2(dafatt.reduce((t, r) => t + nsCalc(r).tot, 0))), dafatt.length > 0], ['In attesa di pagamento', L.eur(r2(attesa.reduce((t, r) => t + nsCalc(r).totFatt, 0)))], ['Da sollecitare', soll.length, soll.length > 0], ['Incassato', L.eur(r2(list.filter((r) => r.pagamentoData).reduce((t, r) => t + nsCalc(r).totFatt, 0)))]]));
+    const body = list.map((r) => {
+      const k = nsCalc(r), st = nsStato(r); T.km += +r.rimborsoKm || 0; T.aut += +r.autostrada || 0; T.rimb += k.rimb; T.isp += +r.ispezioni || 0; T.tot += k.tot; T.epap += k.epap; T.bollo += k.bollo; T.fatt += k.totFatt;
+      const money = (x) => h('td', { class: 'r' }, x ? L.eur(+x) : '');
+      return h('tr', { class: 'clk', tabindex: '0', onclick: () => openForm('noteSpese', r), onkeydown: (ev) => { if (ev.key === 'Enter') openForm('noteSpese', r); } },
+        h('td', {}, r.numero || ''), h('td', {}, r.dataNota ? L.fmtDate(r.dataNota) : ''), h('td', {}, !r.fatturaData && r.dataNota ? L.diffDays(r.dataNota, L.today()) + ' giorni trascorsi' : ''),
+        money(r.rimborsoKm), money(r.autostrada), money(k.rimb), money(r.ispezioni), money(k.tot), h('td', {}, r.fatturaData ? L.fmtDate(r.fatturaData) : ''),
+        h('td', {}, r.fatturaData && !r.pagamentoData ? h('b', { class: 'ns-' + st.k }, st.t) : ''), h('td', {}, r.pagamentoData ? L.fmtDate(r.pagamentoData) : ''),
+        money(k.epap), money(k.bollo), money(k.totFatt), h('td', {}, h('span', { class: 'ns-' + st.k }, st.k === 'ok' ? '✓ Pagata' : st.k === 'todo' ? 'Da fatturare' : st.k === 'late' ? '⚠️ Sollecitare' : r.fatturaData ? 'In attesa' : '')));
+    });
+    root.append(h('div', { class: 'scroll' }, h('table', { class: 'g' },
+      h('thead', {}, h('tr', {}, ['Nota spese', 'Data nota', 'Invio nota spese', 'Rimborso km', 'Autostrada', 'Totale rimborso', 'Ispezioni', 'Totale', 'Fattura emessa', '60 gg', 'Data pagamento', 'EPAP 4%', 'Bollo', 'Totale fattura', 'Stato'].map((x) => h('th', {}, x)))),
+      h('tbody', {}, body), h('tfoot', {}, h('tr', {}, h('td', { colspan: 3 }, 'Σ'), ...[T.km, T.aut, T.rimb, T.isp, T.tot].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', { colspan: 3 }), ...[T.epap, T.bollo, T.fatt].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', {}))))));
+    return root;
+  }
 
   function viewPeriodi() {
     const list = rows('periodi').slice().sort((a, b) => (a.avvio || '').localeCompare(b.avvio || ''));

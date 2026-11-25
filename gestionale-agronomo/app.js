@@ -57,6 +57,10 @@
     const c = Object.assign({}, p, { id: uid(), stato: 'Da avviare', scadenza: '', updated: NOW() });
     delete c.apDenominazione; delete c.apCodice; rows('pratiche').push(c); save(); toast('Pratica duplicata'); location.hash = '#/professione/pratica/' + c.id;
   };
+  /* fatture: se non indicata, la scadenza di pagamento è data fattura + 60 giorni (modificabile da Impostazioni → giorniPag) */
+  const GG_PAG = () => +(db.settings && db.settings.giorniPag) || 60;
+  const scadFatt = (r) => r.scadPag || (r.data ? L.addDays(r.data, GG_PAG()) : '');
+  const fattStato = (r) => { if (r.incassata) return null; const sc = scadFatt(r); if (!sc) return null; const d = L.diffDays(L.today(), sc); return { sc, d, late: d < 0 }; };
   const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti', 'denunce'];
   const pratEco = (p) => {
     const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
@@ -352,14 +356,15 @@
         { k: 'data', l: 'Data fattura', t: 'date', req: 1, def: 'today' },
         { k: 'cliente', l: 'Cliente', t: 'ref', to: 'clienti' },
         { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', req: 1, fmt: 'eur' },
-        { k: 'scadPag', l: 'Scadenza pagamento', t: 'date' },
+        { k: 'scadPag', l: 'Scadenza pagamento', t: 'date', hint: 'Facoltativa: se vuota, è 60 giorni dopo la data della fattura.' },
         { k: 'incassata', l: 'Incassata', t: 'checkbox' },
         { k: 'dataIncasso', l: 'Data incasso', t: 'date' },
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => 'Fattura ' + (r.numero || '') + (r.cliente ? ' – ' + lab('clienti', r.cliente) : ''),
-      cols: ['data', 'importo', 'scadPag', 'incassata'],
+      cols: ['data', 'importo', 'incassata'],
+      extra: (r) => { const st = fattStato(r); return st ? [(st.late ? '⚠️ scaduta da ' + (-st.d) + (st.d === -1 ? ' giorno' : ' giorni') : st.d === 0 ? '⏰ scade oggi' : 'scade tra ' + st.d + (st.d === 1 ? ' giorno' : ' giorni')) + ' (' + L.fmtDate(st.sc) + ')'] : []; },
       isDone: (r) => !!r.incassata,
-      events: (r) => (!r.incassata && r.scadPag ? [{ date: r.scadPag, title: 'Incasso fattura ' + r.numero + ' (' + L.eur(r.importo) + ')' + (r.cliente ? ' – ' + lab('clienti', r.cliente) : '') }] : []),
+      events: (r) => (!r.incassata && scadFatt(r) ? [{ date: scadFatt(r), title: 'Incasso fattura ' + r.numero + ' (' + L.eur(r.importo) + ')' + (r.cliente ? ' – ' + lab('clienti', r.cliente) : '') }] : []),
       actions: [{ label: '€ Incassata', show: (r) => !r.incassata, run: (r) => { r.incassata = true; r.dataIncasso = L.today(); } }],
     },
     classi: {
@@ -815,7 +820,7 @@
       const y = year(); const f = rows('fatture');
       const inc = sum(f.filter((r) => r.incassata && (r.dataIncasso || '').startsWith(y)), 'importo');
       const soglia = +db.settings.soglia || 85000;
-      return [['Incassato ' + y, L.eur(inc)], ['Da incassare', L.eur(sum(f.filter((r) => !r.incassata), 'importo'))], ['Soglia forfettario', Math.round(inc / soglia * 100) + '%', inc / soglia > 0.9]];
+      return [['Incassato ' + y, L.eur(inc)], ['Da incassare', L.eur(sum(f.filter((r) => !r.incassata), 'importo'))], ['Fatture scadute', L.eur(sum(f.filter((r) => { const st = fattStato(r); return st && st.late; }), 'importo')), f.some((r) => { const st = fattStato(r); return st && st.late; })], ['Soglia forfettario', Math.round(inc / soglia * 100) + '%', inc / soglia > 0.9]];
     },
   };
 
@@ -887,7 +892,7 @@
     const det = (title, tot, n, items) => h('details', { class: 'inc-c' }, h('summary', {}, h('span', { class: 't' }, title, h('span', { class: 'az-n' }, n)), h('b', {}, L.eur(r2(tot)))), h('div', { class: 'inc-l' }, items));
     return h('section', { class: 'pr-sec inc' }, h('div', { class: 'az-h' }, h('h3', {}, '💶 Da incassare per categoria')),
       list.map(([k, c]) => det(k, c.tot, c.l.length, c.l.sort((a, b) => b.due - a.due).map(({ p, due }) => h('a', { class: 'row', href: '#/professione/pratica/' + p.id }, h('span', { class: 't' }, lab('clienti', p.cliente) || '(senza cliente)', ' ', h('span', { class: 'note' }, p.stato || '')), h('b', {}, L.eur(due)))))),
-      fat.length ? det('Fatture emesse non incassate', totF, fat.length, fat.sort((a, b) => (a.scadPag || a.data || '').localeCompare(b.scadPag || b.data || '')).map((r) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('fatture', r) }, h('span', { class: 't' }, ENT.fatture.title(r), r.scadPag ? h('span', { class: 'note' }, ' · scad. ' + L.fmtDate(r.scadPag)) : null), h('b', {}, L.eur(+r.importo || 0))))) : null,
+      fat.length ? det('Fatture emesse non incassate', totF, fat.length, fat.sort((a, b) => scadFatt(a).localeCompare(scadFatt(b))).map((r) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('fatture', r) }, h('span', { class: 't' }, ENT.fatture.title(r), scadFatt(r) ? h('span', { class: 'note' }, (fattStato(r).late ? ' · ⚠️ scaduta ' : ' · scade ') + L.fmtDate(scadFatt(r))) : null), h('b', {}, L.eur(+r.importo || 0))))) : null,
       h('p', { class: 'note' }, 'Pratiche: ' + L.eur(totP) + ' (compenso + spese rimborsabili − incassi; per l\u2019anagrafe apistica senza compenso, denunce non pagate).' + (fat.length ? ' Le fatture sono elencate a parte: se una fattura copre una pratica già conteggiata, non sommarle.' : '')));
   }
 

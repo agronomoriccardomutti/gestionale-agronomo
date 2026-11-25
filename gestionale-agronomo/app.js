@@ -2133,9 +2133,17 @@
         h('div', { class: 'bar' },
           h('a', { class: 'btn pri', href: url.replace(/^https:/, 'webcal:') }, '📲 Abbonati in Calendario'),
           btn('Copia link', async () => { try { await navigator.clipboard.writeText(url); toast('Link copiato'); } catch (e) { inp.select(); toast('Seleziona e copia'); } }, ''),
-          btn('Aggiorna ora', () => publishFeed(true), '')),
+          btn('Aggiorna ora', () => publishFeed(true), ''),
+          btn('🔍 Verifica link', async () => {
+            try {
+              const r = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' }), t = await r.text();
+              if (r.ok && /^BEGIN:VCALENDAR/.test(t.trim())) toast('Link OK: ' + (t.match(/BEGIN:VEVENT/g) || []).length + ' scadenze pubblicate');
+              else if (r.status === 400 || r.status === 404) toast('File non trovato: tocca «Aggiorna ora» e, se resta così, esegui calendario.sql su Supabase');
+              else toast('Il link risponde ' + r.status + (r.ok ? ' ma non è un calendario valido' : ''));
+            } catch (e) { toast('Link non raggiungibile: ' + e.message); }
+          }, '')),
         h('p', { class: 'note' }, db.meta.feedAt ? 'Ultimo aggiornamento: ' + new Date(db.meta.feedAt).toLocaleString('it-IT') + '.' : 'Non ancora pubblicato: se resta così esegui lo script calendario.sql su Supabase (vedi README).'),
-        h('p', { class: 'note' }, 'iPhone: tocca "Abbonati". Mac: Calendario → File → Nuovo abbonamento a calendario → incolla il link. Chi ha il link può leggere le scadenze: non condividerlo. L\'app aggiorna il file a ogni sincronizzazione; Calendario lo rilegge ogni tanto (circa ogni ora).'));
+        h('p', { class: 'note' }, 'iPhone: tocca "Abbonati". Mac: Calendario → File → Nuovo abbonamento a calendario → incolla il link (se webcal:// dà errore, usa «Copia link» e incolla l\'indirizzo https://). Chi ha il link può leggere le scadenze: non condividerlo. L\'app aggiorna il file a ogni sincronizzazione; Calendario lo rilegge ogni tanto (circa ogni ora).'));
     }
     return box;
   }

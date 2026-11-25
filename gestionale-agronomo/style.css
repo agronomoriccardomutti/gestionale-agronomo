@@ -396,3 +396,5 @@ dialog.wide{width:min(860px,96vw);max-height:94vh}
 dialog.wide .dlg-in{padding:26px 28px}
 dialog.wide .fld-row{grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:560px){dialog.wide .dlg-in{padding:18px}.dlg-sec{margin-top:6px}}
+
+.az-q{width:100%;box-sizing:border-box;margin:6px 0 10px}.gz{border:0;background:transparent;box-shadow:none;padding:2px 8px;font-size:16px;border-radius:8px}.gz:hover{background:var(--chip)}

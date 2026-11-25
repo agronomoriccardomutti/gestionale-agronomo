@@ -1576,7 +1576,7 @@
   }
 
   /* ---------- Mappa aziende (Leaflet + OpenStreetMap, posizioni da Nominatim) ---------- */
-  const MAP = { f: 'tutte', geoBusy: false };
+  const MAP = { f: 'tutte', g: 'comune', q: '', geoBusy: false };
   const loadLeaflet = () => new Promise((ok, ko) => {
     if (window.L && window.L.map) return ok(window.L);
     if (!document.getElementById('leaflet-css')) { const l = document.createElement('link'); l.id = 'leaflet-css'; l.rel = 'stylesheet'; l.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.append(l); }
@@ -1604,6 +1604,26 @@
     const FL = [['tutte', 'Tutte'], ['prog', 'Con ispezione programmata']];
     const chips = h('div', { class: 'chips' }, FL.map(([k, l]) => h('a', { class: 'chip' + (MAP.f === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); MAP.f = k; route(); } }, l)));
     const gmaps = (a, dir) => 'https://www.google.com/maps/' + (dir ? 'dir/?api=1&destination=' : 'search/?api=1&query=') + a.lat + ',' + a.lng;
+    /* elenco organizzato per nome / comune / provincia */
+    const nz = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const provOf = (a) => { const v = String(a.provincia || '').trim(); return v ? (v.length <= 2 ? v.toUpperCase() : v.replace(/\b\w/g, (c) => c.toUpperCase())) : 'Senza provincia'; };
+    const comOf = (a) => String(a.comune || '').trim() || 'Senza comune';
+    const GR = [['nome', 'Nome'], ['comune', 'Comune'], ['provincia', 'Provincia'], ['provcom', 'Provincia › Comune']];
+    const groupBy = (arr, fn) => { const m = new Map(); for (const a of arr) { const k = fn(a); if (!m.has(k)) m.set(k, []); m.get(k).push(a); } return [...m.entries()].sort((x, y) => (/^Senza /.test(x[0]) ? 1 : 0) - (/^Senza /.test(y[0]) ? 1 : 0) || x[0].localeCompare(y[0], 'it')); };
+    const byName = (x, y) => x.ragione.localeCompare(y.ragione, 'it');
+    const rowOf = (a) => { const pos = a.lat != null && a.lng != null; return h('div', { class: 'row', tabindex: '0', onclick: () => { if (pos && map) { map.setView([a.lat, a.lng], 14); window.scrollTo(0, 0); } else location.hash = '#/ispezioni/azienda/' + a.id; } }, h('span', { class: 't' }, a.ragione, h('div', { class: 'note' }, [a.ubicazione, a.comune, a.provincia].filter(Boolean).join(', ') || (pos ? '' : 'senza indirizzo'))), pos ? null : h('span', { class: 'tag' }, 'non sulla mappa'), prog.has(a.id) ? h('span', { class: 'tag' }, '📅 ' + L.fmtDate(prog.get(a.id))) : null, pos ? h('a', { href: gmaps(a, true), target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '➜') : h('a', { href: '#/ispezioni/azienda/' + a.id, onclick: (e) => e.stopPropagation() }, 'Scheda')); };
+    const zoomTo = (arr) => { const b = arr.filter((a) => a.lat != null && a.lng != null).map((a) => [a.lat, a.lng]); if (map && b.length) { map.fitBounds(b, { padding: [30, 30], maxZoom: 14 }); window.scrollTo(0, 0); } };
+    const grp = (title, arr, inner, open) => h('details', { class: 'inc-c', open: open ? '' : null }, h('summary', {}, h('span', { class: 't' }, title, h('span', { class: 'az-n' }, arr.length)), arr.some((a) => a.lat != null) ? h('button', { type: 'button', class: 'gz', title: 'Mostra sulla mappa', onclick: (e) => { e.preventDefault(); e.stopPropagation(); zoomTo(arr); } }, '📍') : null), h('div', { class: 'inc-l' }, inner));
+    const drawList = () => {
+      const q = nz(MAP.q).split(/\s+/).filter(Boolean);
+      const items = all.filter((a) => (MAP.f !== 'prog' || prog.has(a.id)) && q.every((t) => nz([a.ragione, a.comune, a.provincia, a.ubicazione, a.codice].join(' ')).includes(t)));
+      let out;
+      if (MAP.g === 'nome') out = groupBy(items, (a) => (nz(a.ragione).charAt(0) || '#').toUpperCase()).map(([k, arr]) => grp(k, arr, arr.sort(byName).map(rowOf), true));
+      else if (MAP.g === 'provincia') out = groupBy(items, provOf).map(([k, arr]) => grp(k, arr, arr.sort(byName).map(rowOf), true));
+      else if (MAP.g === 'provcom') out = groupBy(items, provOf).map(([k, arr]) => grp(k, arr, groupBy(arr, comOf).map(([c, sub]) => grp(c, sub, sub.sort(byName).map(rowOf), true)), true));
+      else out = groupBy(items, comOf).map(([k, arr]) => grp(k, arr, arr.sort(byName).map(rowOf), true));
+      listEl.replaceChildren(h('p', { class: 'note' }, items.length + ' aziende' + (q.length ? ' trovate' : '') + ' · ' + new Set(items.map(comOf)).size + ' comuni · ' + new Set(items.map(provOf)).size + ' province'), ...(out.length ? out : [h('div', { class: 'empty' }, 'Nessuna azienda.')]));
+    };
     const draw = () => {
       const pts = withPos().filter((a) => MAP.f !== 'prog' || prog.has(a.id));
       status.textContent = pts.length + ' aziende sulla mappa' + (todo().length ? ' · ' + todo().length + ' da localizzare' : '') + (all.filter((a) => a.geoFail).length ? ' · ' + all.filter((a) => a.geoFail).length + ' senza risultato' : '') + '.';
@@ -1617,7 +1637,7 @@
         }
         if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13 });
       }
-      listEl.replaceChildren(...pts.sort((x, y) => (x.comune || '').localeCompare(y.comune || '', 'it') || x.ragione.localeCompare(y.ragione, 'it')).map((a) => h('div', { class: 'row', tabindex: '0', onclick: () => { if (map) { map.setView([a.lat, a.lng], 14); window.scrollTo(0, 0); } } }, h('span', { class: 't' }, a.ragione, h('div', { class: 'note' }, [a.ubicazione, a.comune].filter(Boolean).join(', '))), prog.has(a.id) ? h('span', { class: 'tag' }, '📅 ' + L.fmtDate(prog.get(a.id))) : null, h('a', { href: gmaps(a, true), target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '➜'))));
+      drawList();
     };
     const runGeo = async (force) => {
       if (MAP.geoBusy) return; if (force) for (const a of all) { delete a.lat; delete a.lng; delete a.geoFail; delete a.geoApprox; }
@@ -1628,7 +1648,9 @@
     };
     const root = h('div', {}, h('p', {}, h('a', { href: '#/ispezioni/aziende' }, '← Aziende')), h('h2', {}, '🗺️ Mappa aziende'), chips,
       h('div', { class: 'bar' }, btn('📍 Localizza le aziende mancanti', () => runGeo(false), 'pri'), btn('↻ Ricalcola tutte le posizioni', () => { if (confirm('Cancellare le posizioni salvate e ricalcolarle (richiede circa 1 secondo per azienda)?')) runGeo(true); }, '')), status,
-      h('div', { class: 'note' }, '🟢 ispezione programmata · 🔵 altre aziende. Tocca un pin per scheda, Google Maps e indicazioni.'), mapEl, h('h3', {}, 'Elenco'), listEl);
+      h('div', { class: 'note' }, '🟢 ispezione programmata · 🔵 altre aziende. Tocca un pin per scheda, Google Maps e indicazioni.'), mapEl, h('h3', {}, 'Elenco'),
+      h('div', { class: 'chips' }, h('span', { class: 'note' }, 'Organizza per:'), GR.map(([k, l]) => h('a', { class: 'chip' + (MAP.g === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); MAP.g = k; route(); } }, l))),
+      h('input', { type: 'search', class: 'az-q', placeholder: 'Cerca per nome, comune o provincia…', value: MAP.q, 'aria-label': 'Cerca azienda', oninput: (e) => { MAP.q = e.target.value; drawList(); } }), listEl);
     loadLeaflet().then((Lf) => { if (!document.getElementById('azmap')) return; map = Lf.map(mapEl, { zoomControl: true }).setView([44.95, 8.55], 9); Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); layer = Lf.layerGroup().addTo(map); draw(); if (todo().length) runGeo(false); })
       .catch((e) => { status.textContent = e.message; draw(); });
     draw(); return root;

@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -34,6 +34,7 @@
   }
 
   /* ---------- Definizione dati ---------- */
+  const VERS_CAT = ['EPAP – contributi previdenziali', 'Assicurazione professionale', 'Imposta sostitutiva (acconto / saldo)', 'Ordine / albo', 'Commercialista', 'Formazione e aggiornamento', 'Software e abbonamenti', 'Telefono e internet', 'Attrezzature e cancelleria', 'Auto e carburante', 'Altro'];
   const TIPI_PRATICA = ['PAC / domanda unica', 'Anagrafe Apistica', 'PSR', 'Catasto', 'Estimo', 'Piano fitosanitario (PAN)', 'Progetto verde / giardino', 'Coordinamento sicurezza', 'Formazione', 'Consulenza', 'Altro'];
   /* «Anagrafe apistica» e «Anagrafe Apistica» sono lo stesso tipo: si unifica la grafia (prima voce dell'elenco, altrimenti la più usata) */
   const normTipi = () => {
@@ -74,6 +75,23 @@
     if (r.dataNota) return { k: 'todo', t: 'Da fatturare · ' + L.diffDays(r.dataNota, T) + ' giorni dalla nota' };
     return { k: 'wait', t: '' };
   };
+  /* ---- Versamenti (EPAP, assicurazione, imposte…) con archivio PDF sul dispositivo ---- */
+  const FILES = (() => {
+    const op = () => new Promise((res, rej) => { const q = indexedDB.open('gestionale-files', 1); q.onupgradeneeded = () => q.result.createObjectStore('f'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+    const run = async (mode, fn) => { const d = await op(); return new Promise((res, rej) => { const t = d.transaction('f', mode), rq = fn(t.objectStore('f')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+    return { put: (k, b) => run('readwrite', (s) => s.put(b, k)), get: (k) => run('readonly', (s) => s.get(k)), del: (k) => run('readwrite', (s) => s.delete(k)).catch(() => {}) };
+  })();
+  async function openDoc(key, meta) {
+    const w = window.open('', '_blank');
+    try {
+      const b = await FILES.get(key); if (!b) { if (w) w.close(); return toast('File non trovato su questo dispositivo'); }
+      const url = URL.createObjectURL(b);
+      if (w) w.location.href = url; else { const a = h('a', { href: url, download: (meta && meta.name) || 'documento' }); document.body.append(a); a.click(); a.remove(); }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { if (w) w.close(); toast('Impossibile aprire il file: ' + e.message); }
+  }
+  const vsGruppo = (c) => (/epap|inps|contribut|previdenz|cassa/i.test(c || '') ? 'Contributi' : /imposta|irpef|f24|\biva\b|tasse|acconto fiscale|sostitutiva/i.test(c || '') ? 'Imposte' : 'Spese');
+  const vsAnno = (r) => String(r.anno || (r.data || '').slice(0, 4) || '');
   const PRAT_FIGLI = ['pagamenti', 'spesePratica', 'preventivi', 'documenti', 'denunce'];
   const pratEco = (p) => {
     const sum = (ek, f) => rows(ek).filter((x) => x.pratica === p.id && (!f || f(x))).reduce((t, x) => t + (+x.importo || 0), 0);
@@ -227,6 +245,21 @@
         { k: 'epap', l: 'Applica EPAP 4% sugli importi delle ispezioni', t: 'checkbox' }],
       title: (r) => (r.anno || '') + ' · ' + L.fmtDate(r.avvio) + ' – ' + L.fmtDate(r.chiusura), cols: ['anno', 'avvio', 'chiusura'],
       onDelete: (r) => { dropWhere('piano', (x) => x.periodo === r.id); dropWhere('ispezioni', (x) => x.periodo === r.id); },
+    },
+    versamenti: {
+      label: 'Versamenti', one: 'versamento', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data pagamento', t: 'date', req: true, def: 'today' },
+        { k: 'categoria', l: 'Categoria', t: 'text', req: true, list: VERS_CAT, learn: 1, hint: 'Scegli o scrivi: se è nuova, la categoria viene ricordata.' },
+        { k: 'descrizione', l: 'Descrizione', t: 'text', hint: 'Es. «EPAP 2° acconto», «Polizza RC professionale 2026».' },
+        { k: 'importo', l: 'Importo (€)', t: 'number', step: '0.01', req: true, fmt: 'eur' },
+        { k: 'anno', l: 'Anno di competenza', t: 'number', step: '1', hint: 'Solo se diverso dall’anno del pagamento (es. saldo pagato a giugno per l’anno prima).' },
+        { k: 'pdf', l: 'Ricevuta / PDF', t: 'doc' },
+        { k: 'link', l: 'Link al file su cloud', t: 'url', hint: 'Facoltativo: cartella o file su Drive/iCloud/Dropbox.' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      dlg: { name: () => 'versamento', wide: true, focus: 'categoria', rows: [['data', 'importo'], ['categoria', 'descrizione'], ['anno', 'link']], sections: { data: 'Pagamento', pdf: 'Documento', note: 'Note' } },
+      title: (r) => (r.categoria || 'Versamento') + (r.descrizione ? ' – ' + r.descrizione : ''), cols: ['data', 'importo'],
+      onDelete: (r) => { FILES.del(r.id + ':pdf'); },
     },
     noteSpese: {
       label: 'Fatturazione', one: 'nota spese', order: { k: 'dataNota', dir: 1 },
@@ -556,7 +589,7 @@
     { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
-    { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture'] },
+    { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture', 'versamenti'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
     { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
@@ -677,6 +710,12 @@
           btn('✕', () => { if (parts.length > 1) { parts.splice(i, 1); draw(); } }))),
         btn('+ Aggiungi parte', () => { parts.push({ id: uid(), name: 'Parte ' + (parts.length + 1), max: 5 }); draw(); }));
         draw();
+      } else if (f.t === 'doc') {
+        el = h('div', { class: 'docf' }); const st = el.docState = { meta: val && val.name ? val : '', file: null };
+        const inp = h('input', { type: 'file', accept: 'application/pdf,image/*', hidden: true, onchange: () => { const fl = inp.files[0]; if (!fl) return; if (fl.size > 15 * 1024 * 1024) { inp.value = ''; return toast('File troppo grande (max 15 MB)'); } st.file = fl; st.meta = { name: fl.name, size: fl.size, type: fl.type }; drawD(); } });
+        const drawD = () => el.replaceChildren(inp, st.meta ? h('div', { class: 'docf-i' }, h('span', { class: 't' }, '📎 ' + st.meta.name, h('small', {}, ' ' + Math.max(1, Math.round((st.meta.size || 0) / 1024)) + ' KB')),
+          !st.file ? btn('Apri', () => openDoc(r.id + ':' + f.k, st.meta), '') : null, btn('Sostituisci', () => inp.click(), ''), btn('✕', () => { st.meta = ''; st.file = null; st.del = true; drawD(); }, '')) : h('div', { class: 'docf-i' }, btn('📎 Allega PDF o foto', () => inp.click(), ''), h('small', {}, 'Resta salvato su questo dispositivo')));
+        drawD();
       } else if (f.t === 'checkbox') { el = h('input', { type: 'checkbox', name: f.k }); el.checked = !!val; }
       else {
         el = h('input', { type: f.t === 'number' ? 'number' : f.t, name: f.k, step: f.step, inputmode: f.t === 'number' ? 'decimal' : null, autocomplete: 'off' });
@@ -715,6 +754,7 @@
       e.preventDefault();
       for (const f of ent.fields) {
         const el = inputs[f.k];
+        if (f.t === 'doc') { r[f.k] = el.docState.meta || ''; continue; }
         let v = f.t === 'checkbox' ? el.checked : f.t === 'parts' ? el.partsData.map((p) => ({ id: p.id, name: String(p.name).trim() || 'Parte', max: Number(p.max) || 0 })) : el.value.trim();
         if (f.t === 'number') v = v === '' ? '' : Number(v);
         if (f.req && (v === '' || v == null)) { el.focus(); return toast('Compila: ' + f.l); }
@@ -724,6 +764,11 @@
       const i = rows(ek).findIndex((x) => x.id === r.id);
       if (i >= 0) rows(ek)[i] = r; else rows(ek).push(r);
       save(); close(); route(); toast('Salvato');
+      for (const f of ent.fields) if (f.t === 'doc') {
+        const st = inputs[f.k].docState, key = r.id + ':' + f.k;
+        if (st.file) { FILES.put(key, st.file).then(() => { try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { /* niente */ } }).catch(() => toast('Non sono riuscito ad archiviare il file su questo dispositivo')); }
+        else if (st.del) FILES.del(key);
+      }
     });
     dlg.append(form); dlg.showModal();
     if (D && D.focus && inputs[D.focus] && isNew) setTimeout(() => { try { inputs[D.focus].focus(); } catch (e) { /* niente */ } }, 30);
@@ -929,15 +974,40 @@
       h('p', { class: 'note' }, 'Pratiche: ' + L.eur(totP) + ' (compenso + spese rimborsabili − incassi; per l\u2019anagrafe apistica senza compenso, denunce non pagate).' + (fat.length ? ' Le fatture sono elencate a parte: se una fattura copre una pratica già conteggiata, non sommarle.' : '')));
   }
 
+  function viewVersamenti() {
+    const all = rows('versamenti'), cur = String(new Date().getFullYear());
+    const anni = [...new Set([cur, ...all.map(vsAnno).filter(Boolean)])].sort().reverse();
+    if (!ui.vy || (ui.vy !== 'tutti' && !anni.includes(ui.vy))) ui.vy = cur;
+    const list = all.filter((r) => ui.vy === 'tutti' || vsAnno(r) === ui.vy).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    const tot = (g) => r2(list.filter((r) => !g || vsGruppo(r.categoria) === g).reduce((t, r) => t + (+r.importo || 0), 0));
+    const byCat = {}; list.forEach((r) => { const k = (r.categoria || 'Senza categoria').trim(); (byCat[k] = byCat[k] || { n: 0, t: 0 }); byCat[k].n++; byCat[k].t += +r.importo || 0; });
+    const cats = Object.entries(byCat).sort((a, b) => b[1].t - a[1].t), T = tot();
+    const csv = () => { const q = (x) => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"'; deliver('\ufeffData;Categoria;Gruppo;Descrizione;Importo;Anno competenza;Allegato\n' + list.slice().reverse().map((r) => [r.data, r.categoria, vsGruppo(r.categoria), r.descrizione, String(r.importo || 0).replace('.', ','), vsAnno(r), r.pdf && r.pdf.name].map(q).join(';')).join('\n'), 'versamenti-' + ui.vy + '.csv', 'text/csv'); };
+    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuovo versamento', () => openForm('versamenti', null), 'pri'), list.length ? btn('⬇️ Esporta CSV', csv, '') : null),
+      h('div', { class: 'chips' }, anni.concat(['tutti']).map((a) => h('a', { class: 'chip' + (ui.vy === a ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.vy = a; route(); } }, a === 'tutti' ? 'Tutti gli anni' : a))),
+      tiles([['Totale pagato', L.eur(T)], ['Contributi (EPAP…)', L.eur(tot('Contributi'))], ['Imposte', L.eur(tot('Imposte'))], ['Altre spese', L.eur(tot('Spese'))]]),
+      !list.length ? h('div', { class: 'empty' }, 'Nessun versamento' + (ui.vy === 'tutti' ? '' : ' nel ' + ui.vy) + '. Registra EPAP, assicurazione professionale, imposte e altre spese con «+ Nuovo versamento», e allega il PDF della ricevuta.') : h('div', {},
+        h('h3', {}, 'Per categoria'),
+        h('div', { class: 'vs-cat' }, cats.map(([k, v]) => h('div', { class: 'vs-r' }, h('span', { class: 't' }, k, h('span', { class: 'az-n' }, v.n)), h('b', {}, L.eur(r2(v.t))), h('div', { class: 'vs-bar' }, h('i', { style: 'width:' + Math.max(2, Math.round(v.t / T * 100)) + '%' }))))),
+        h('h3', {}, 'Elenco'),
+        h('div', { class: 'list' }, list.map((r) => h('article', { class: 'card', tabindex: '0', onclick: () => openForm('versamenti', r), onkeydown: (e) => { if (e.key === 'Enter') openForm('versamenti', r); } },
+          h('div', { class: 'card-t card-tp' }, h('span', {}, r.categoria || 'Versamento'), h('b', {}, L.eur(+r.importo || 0))),
+          h('div', { class: 'card-m' }, [r.data ? L.fmtDate(r.data) : '', r.descrizione, r.anno && String(r.anno) !== (r.data || '').slice(0, 4) ? 'competenza ' + r.anno : ''].filter(Boolean).join(' · ')),
+          h('div', { class: 'card-a' }, tag(vsGruppo(r.categoria), vsGruppo(r.categoria) === 'Imposte' ? 'warn' : vsGruppo(r.categoria) === 'Contributi' ? 'info' : ''),
+            r.pdf ? h('button', { type: 'button', class: 'vs-pdf', onclick: (e) => { e.stopPropagation(); openDoc(r.id + ':pdf', r.pdf); } }, '📎 Ricevuta') : null,
+            r.link ? h('a', { class: 'vs-pdf', href: r.link, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '🔗 Cloud') : null))))),
+      h('p', { class: 'note' }, 'I PDF restano salvati solo su questo dispositivo (non nel backup né nella sincronizzazione): tieni una copia anche su cloud e, se vuoi, incolla il link nel versamento. Il totale per gruppo (Contributi / Imposte / Altre spese) è dedotto dal nome della categoria.'));
+  }
+
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
     return h('div', {}, h('h2', {}, mod.icon + ' ' + mod.label),
-      SUMMARY[mod.id] && tiles(SUMMARY[mod.id]()),
-      mod.id === 'professione' && viewIncassi(),
+      SUMMARY[mod.id] && !(mod.id === 'professione' && ek === 'versamenti') && tiles(SUMMARY[mod.id]()),
+      mod.id === 'professione' && ek !== 'versamenti' && viewIncassi(),
       mod.ents.length > 1 && h('div', { class: 'chips' }, mod.ents.map((k) => h('a', { class: 'chip' + (k === ek ? ' on' : ''), href: '#/' + mod.id + '/' + k }, ENT[k].label)), mod.id === 'ispezioni' && h('a', { class: 'chip', href: '#/ispezioni/mappa' }, '🗺️ Mappa')),
       extra, body);
   }

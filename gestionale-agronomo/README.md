@@ -153,3 +153,6 @@ Toccando una pratica si apre la sua scheda: compenso, spese da rimborsare, incas
 
 ## Fatturazione note spese (Ispezioni → Fatturazione)
 Vista come il foglio «Conteggio Note Spese»: nota spese → fattura emessa → 60 giorni → pagamento, con EPAP 4% e bollo. Mostra «SOLLECITARE» dopo 60 giorni e i giorni trascorsi dalle note non ancora fatturate. I dati restano solo sul dispositivo (`noteSpese` in `localOnly`). «Importa dal foglio Excel» legge il file .xlsx con le stesse colonne.
+
+## Versamenti (Professione → Versamenti)
+Registro dei pagamenti per tasse e spese professionali (EPAP, assicurazione professionale, imposta sostitutiva, ecc.) con totali per anno, per gruppo (Contributi / Imposte / Altre spese) e per categoria, export CSV e archivio della ricevuta PDF. I dati e i PDF restano solo sul dispositivo (`versamenti` in `localOnly`; i PDF stanno in IndexedDB e non sono nel backup JSON).

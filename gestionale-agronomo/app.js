@@ -524,6 +524,20 @@
       title: (r) => (r.tipo === 'Dipartimento Scienze Agrarie' ? 'Dipartimento Sc. Agrarie' : 'CdC ' + (lab('classi', r.classe) || '')) + ' – verbale n. ' + (r.numero || '?'),
       cols: ['tipo', 'data'], detail: (r) => '#/scuola/verbale/' + r.id,
     },
+    riunioni: {
+      label: 'Dipartimento', one: 'riunione di dipartimento', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data', t: 'date', def: 'today', req: 1 },
+        { k: 'ora', l: 'Ora', t: 'time' },
+        { k: 'luogo', l: 'Luogo', t: 'text', list: ["Aula informatica", "Aula magna", "Online"], learn: 1 },
+        { k: 'stato', l: 'Stato', t: 'select', opts: ['Programmata', 'Svolta'], def: 'Programmata' },
+        { k: 'odg', l: 'Ordine del giorno', t: 'textarea', hint: 'Un punto per riga.' },
+        { k: 'decisioni', l: 'Decisioni / compiti', t: 'textarea' },
+        { k: 'link', l: 'Link a documenti (facoltativo)', t: 'url' },
+        { k: 'verbale', l: 'Verbale collegato', t: 'ref', to: 'verbali' }],
+      dlg: { name: () => 'riunione di dipartimento', wide: true, focus: 'data', skip: ['verbale'], rows: [['data', 'ora'], ['luogo', 'stato']], sections: { data: 'Riunione', odg: 'Contenuto', link: 'Documenti' } },
+      title: (r) => 'Dipartimento Sc. Agrarie – ' + (r.data ? L.fmtDate(r.data) : ''), cols: ['data', 'stato', 'luogo'],
+    },
     appunti: {
       label: 'Appunti', one: 'pagina di appunti', order: { k: 'data', dir: -1 },
       fields: [
@@ -605,7 +619,7 @@
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture', 'versamenti'] },
-    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'appunti', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
+    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'appunti', 'riunioni', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
     { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
@@ -1082,7 +1096,7 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : ek === 'riunioni' ? viewDipartimento() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
@@ -1424,14 +1438,14 @@
       firme: [['FIRMA PRESIDENTE', v.presidente || 'Prof. ____________________'], ['FIRMA COORDINATORE', sig(coo)], ['FIRMA SEGRETARIO', sig(sec)]],
     };
   }
-  function newVerbale(tipo, classe) {
+  function newVerbale(tipo, classe, data, ora, luogo, cb) {
     const prev = rows('verbali').filter((x) => x.tipo === tipo && (tipo !== 'Consiglio di classe' || x.classe === classe)).sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0];
     const base = prev || rows('verbali').slice().sort((a, b) => (b.data || '').localeCompare(a.data || ''))[0] || {};
     const me = rows('docenti').find((d) => /mutti/i.test(d.nome));
-    const v = { id: uid(), tipo, classe: tipo === 'Consiglio di classe' ? (classe || '') : '', numero: prev ? (Number(prev.numero) || 0) + 1 : 1, data: L.today(), ora: base.ora || '', oraFine: '', luogo: base.luogo || "nell'aula-informatica",
+    const v = { id: uid(), tipo, classe: tipo === 'Consiglio di classe' ? (classe || '') : '', numero: prev ? (Number(prev.numero) || 0) + 1 : 1, data: data || L.today(), ora: ora || base.ora || '', oraFine: '', luogo: luogo || base.luogo || "nell'aula-informatica",
       segretario: base.segretario || '', coordinatore: base.coordinatore || (me ? me.id : ''), presidente: base.presidente || '', intest1: base.intest1 || 'ITAS "VINCENZO LUPARIA"', intest2: base.intest2 || 'Via Luparia, 14 - ROSIGNANO M.TO (AL) - FRAZ. SAN MARTINO',
       istituto: base.istituto || 'Istituto Superiore “V. LUPARIA”', citta: base.citta || 'SAN MARTINO DI ROSIGNANO', assenti: [], odg: [], updated: NOW() };
-    rows('verbali').push(v); save(); location.hash = '#/scuola/verbale/' + v.id; route();
+    rows('verbali').push(v); if (cb) cb(v); save(); location.hash = '#/scuola/verbale/' + v.id; route();
   }
   function viewVerbale(id) {
     const v = byId('verbali', id);
@@ -1924,6 +1938,34 @@
       h('thead', {}, h('tr', {}, ['Nota spese', 'Data nota', 'Invio nota spese', 'Rimborso km', 'Autostrada', 'Totale rimborso', 'Ispezioni', 'Totale', 'Fattura emessa', '60 gg', 'Data pagamento', 'EPAP 4%', 'Bollo', 'Totale fattura', 'Stato'].map((x) => h('th', {}, x)))),
       h('tbody', {}, body), h('tfoot', {}, h('tr', {}, h('td', { colspan: 3 }, 'Σ'), ...[T.km, T.aut, T.rimb, T.isp, T.tot].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', { colspan: 3 }), ...[T.epap, T.bollo, T.fatt].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', {}))))));
     return root;
+  }
+
+  function viewDipartimento() {
+    const all = rows('riunioni'), oggi = L.today();
+    const key = (r) => (r.data || '') + ' ' + (r.ora || '');
+    const prox = all.filter((r) => r.stato !== 'Svolta' && (r.data || '9') >= oggi).sort((a, b) => key(a).localeCompare(key(b)));
+    const pass = all.filter((r) => !prox.includes(r)).sort((a, b) => key(b).localeCompare(key(a)));
+    const verbale = (r) => {
+      const v = r.verbale && rows('verbali').find((x) => x.id === r.verbale);
+      if (v) { location.hash = '#/scuola/verbale/' + v.id; route(); return; }
+      newVerbale('Dipartimento Scienze Agrarie', '', r.data, r.ora, '', (nv) => { r.verbale = nv.id; r.stato = 'Svolta'; r.updated = NOW(); });
+    };
+    const card = (r) => {
+      const v = r.verbale && rows('verbali').find((x) => x.id === r.verbale);
+      const pts = (r.odg || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const gg = r.data ? L.diffDays(r.data, oggi) : null;
+      return h('div', { class: 'row', tabindex: '0', onclick: () => openForm('riunioni', r) },
+        h('span', { class: 't' }, (r.data ? L.fmtDate(r.data) : 'Senza data') + (r.ora ? ' · ' + r.ora : '') + (r.luogo ? ' · ' + r.luogo : ''),
+          pts.length ? h('div', { class: 'note' }, pts.length + (pts.length === 1 ? ' punto: ' : ' punti: ') + pts.slice(0, 3).join(' · ') + (pts.length > 3 ? '…' : '')) : null,
+          r.decisioni ? h('div', { class: 'note' }, '✔ ' + r.decisioni.split('\n')[0]) : null),
+        h('span', { class: 'tag' }, r.stato === 'Svolta' ? 'Svolta' : (gg != null && gg <= 0 ? (gg === 0 ? 'Oggi' : 'tra ' + (-gg) + ' gg') : 'Programmata')),
+        r.link ? h('a', { href: r.link, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '🔗') : null,
+        h('button', { type: 'button', class: 'gz', title: v ? 'Apri verbale' : 'Crea verbale', onclick: (e) => { e.stopPropagation(); verbale(r); } }, v ? '📄 Verbale' : '📝 Verbale'));
+    };
+    const sec = (t, a, vuoto) => h('div', {}, h('h3', {}, t), h('div', { class: 'inc-l' }, a.length ? a.map(card) : [h('div', { class: 'empty' }, vuoto)]));
+    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuova riunione', () => openForm('riunioni', null), 'pri'), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), '')),
+      h('p', { class: 'note' }, 'Dipartimento di Scienze Agrarie: tocca 📝 per creare il verbale della riunione (data, ora e luogo vengono copiati).'),
+      sec('Prossime riunioni', prox, 'Nessuna riunione in programma.'), sec('Riunioni passate', pass, 'Nessuna riunione registrata.'));
   }
 
   function viewAppunti() {

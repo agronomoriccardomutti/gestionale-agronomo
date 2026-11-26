@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -662,6 +662,8 @@
     }
     // spese e ricorrenti ora si sincronizzano: una tantum le segno come "da inviare" (altrimenti restano fuori dal primo invio)
     if (!o.meta.spSync) { o.meta.spSync = 1; for (const k of ['movimenti', 'ricorrenti']) for (const r of o.data[k]) r.updated = now; }
+    // studenti e valutazioni ora si sincronizzano: al primo invio li mando tutti (senza toccare le date di modifica)
+    if (!o.meta.stuMig) { o.meta.stuMig = 1; o.meta.force = ['studenti', 'valutazioni']; }
     // migrazione: trimestre (testo) -> periodo; stato "Eseguita" -> "Svolta"
     const byTri = {};
     for (const ek of ['piano', 'ispezioni']) for (const r of o.data[ek]) {
@@ -2576,11 +2578,11 @@
       }
       db.meta.lastPull = max;
       const t0 = new Date().toISOString(); const lp = ts(db.meta.lastPush); const out = []; // 2) invia le modifiche locali
-      for (const ek of Object.keys(ENT)) if (synced(ek)) for (const r of rows(ek)) if (ts(r.updated) > lp && pulled[r.id] !== r.updated) out.push({ id: r.id, entity: ek, data: r, updated: r.updated, deleted: false });
+      for (const ek of Object.keys(ENT)) if (synced(ek)) for (const r of rows(ek)) if ((ts(r.updated) > lp || (db.meta.force || []).includes(ek)) && pulled[r.id] !== r.updated) out.push({ id: r.id, entity: ek, data: r, updated: r.updated, deleted: false });
       const tombs = db.meta.deleted.slice();
       for (const d of tombs) out.push({ id: d.id, entity: d.entity, data: {}, updated: d.updated, deleted: true });
       for (let i = 0; i < out.length; i += 200) await api('POST', '/rest/v1/records?on_conflict=id', out.slice(i, i + 200), { Prefer: 'resolution=merge-duplicates,return=minimal' });
-      db.meta.deleted = db.meta.deleted.filter((d) => !tombs.includes(d));
+      db.meta.deleted = db.meta.deleted.filter((d) => !tombs.includes(d)); db.meta.force = [];
       db.meta.lastPush = t0; db.meta.lastSync = new Date().toISOString();
       db.meta.feedErr = '';
       await publishFeed(false);

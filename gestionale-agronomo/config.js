@@ -5,6 +5,6 @@ window.GESTIONALE_CONFIG = {
   supabaseUrl: 'https://kdypfxgunwsyzbkmuvqy.supabase.co',
   supabaseKey: 'sb_publishable_R6ERl2aRPIi88ESnALUqtQ_gMxP-6Ro',
   // Schede che NON vengono mai inviate online: restano solo sul dispositivo.
-  // Fatture, dati degli studenti (minorenni), verbali, importi delle pratiche (pagamenti, spese, preventivi). Togli 'studenti' e 'valutazioni' da qui solo se vuoi sincronizzarli.
-  localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'],
+  // Fatture, verbali, diario delle figlie, importi delle pratiche (pagamenti, spese, preventivi). Studenti e valutazioni (minorenni) ora si sincronizzano: rimettili qui per tenerli solo sul dispositivo.
+  localOnly: ['fatture', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'],
 };

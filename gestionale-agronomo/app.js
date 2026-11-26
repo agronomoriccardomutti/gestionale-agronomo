@@ -1971,6 +1971,9 @@
 
   // Appunti pubblicati sul sito: pagine statiche in appunti/ elencate in appunti/index.json (sola lettura, valgono su tutti i dispositivi)
   const APPUNTI_SITO = { list: null };
+  const VER_K = 'gestionale-verifica-appunti'; // argomenti scelti per la verifica (salvati su questo dispositivo; le pagine di appunti scrivono la stessa chiave)
+  const verLoad = () => { try { return JSON.parse(localStorage.getItem(VER_K)) || {}; } catch (e) { return {}; } };
+  const verSave = (o) => { try { localStorage.setItem(VER_K, JSON.stringify(o)); } catch (e) { /* storage non disponibile */ } };
   function viewAppunti() {
     if (!APPUNTI_SITO.list && !APPUNTI_SITO.busy) {
       APPUNTI_SITO.busy = true;
@@ -1982,9 +1985,23 @@
     const g = ui.apg || 'classe', nz = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const classeOf = (r) => (r.classe && lab('classi', r.classe)) || r.classeTxt || 'Senza classe', matOf = (r) => (r.materia || '').trim() || 'Senza materia';
     const list = h('div', {});
+    const verPanel = () => {
+      const pages = (APPUNTI_SITO.list || []).filter((p) => (p.sezioni || []).length), key = (p) => (p.link || '').split('/').pop().replace(/\.html$/, '');
+      if (!pages.length) return null;
+      const tot = () => Object.values(verLoad()).reduce((n, a) => n + a.length, 0), sum = h('b', {});
+      const upd = () => { const t = tot(); sum.textContent = '🎯 Argomenti per la verifica: ' + (t ? t + ' scelti' : 'nessuno scelto'); };
+      upd();
+      return h('details', { class: 'inc-c', open: tot() ? '' : null }, h('summary', {}, sum),
+        h('p', { class: 'note' }, 'Spunta gli argomenti che userai per la verifica (si possono spuntare anche dentro la pagina degli appunti).'),
+        ...pages.map((p) => h('div', {}, h('div', { class: 'note' }, p.titolo + (p.classe ? ' · ' + p.classe : '')),
+          ...p.sezioni.map((x) => { const c = h('input', { type: 'checkbox' }); c.checked = (verLoad()[key(p)] || []).includes(x.id);
+            c.onchange = () => { const st = verLoad(), a = (st[key(p)] || []).filter((i) => i !== x.id); if (c.checked) a.push(x.id); if (a.length) st[key(p)] = a; else delete st[key(p)]; verSave(st); upd(); draw(); };
+            return h('label', { class: 'row', style: 'cursor:pointer' }, c, h('span', { class: 't' }, ' ' + x.titolo), h('a', { href: p.link + '#' + x.id, target: '_blank', rel: 'noopener' }, '📖')); }))));
+    };
+    const verN = (r) => (r.sito && r.link ? (verLoad()[r.link.split('/').pop().replace(/\.html$/, '')] || []).length : 0);
     const open = (r) => { if (r.link) window.open(r.link, '_blank', 'noopener'); else openForm('appunti', r); };
     const rowOf = (r) => h('div', { class: 'row', tabindex: '0', onclick: () => open(r), onkeydown: (e) => { if (e.key === 'Enter') open(r); } },
-      h('span', { class: 't' }, r.titolo || r.argomento || 'Appunti', h('div', { class: 'note' }, [r.argomento && r.titolo ? r.argomento : '', g !== 'classe' ? (r.classe || r.classeTxt ? classeOf(r) : '') : '', g !== 'materia' ? r.materia : '', r.tipo, r.data ? L.fmtDate(r.data) : ''].filter(Boolean).join(' · '))),
+      h('span', { class: 't' }, r.titolo || r.argomento || 'Appunti', h('div', { class: 'note' }, [r.argomento && r.titolo ? r.argomento : '', g !== 'classe' ? (r.classe || r.classeTxt ? classeOf(r) : '') : '', g !== 'materia' ? r.materia : '', r.tipo, r.data ? L.fmtDate(r.data) : '', verN(r) ? '🎯 ' + verN(r) + ' per la verifica' : ''].filter(Boolean).join(' · '))),
       r.link ? h('a', { href: r.link, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '📖 Apri') : h('span', { class: 'tag' }, 'senza link'),
       r.sito ? h('span', { class: 'tag', title: 'Pubblicato sul sito' }, '🌐') : h('button', { type: 'button', class: 'gz', title: 'Modifica', onclick: (e) => { e.stopPropagation(); openForm('appunti', r); } }, '✏️'));
     const draw = () => {
@@ -1998,6 +2015,7 @@
     draw();
     return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuova pagina di appunti', () => openForm('appunti', null), 'pri')),
       h('div', { class: 'chips' }, h('span', { class: 'note' }, 'Raggruppa per:'), [['classe', 'Classe'], ['materia', 'Materia'], ['recenti', 'Più recenti']].map(([k, l]) => h('a', { class: 'chip' + (g === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.apg = k; route(); } }, l))),
+      verPanel(),
       h('input', { type: 'search', class: 'az-q', placeholder: 'Cerca negli appunti…', value: ui.apq || '', 'aria-label': 'Cerca appunti', oninput: (e) => { ui.apq = e.target.value; draw(); } }), list);
   }
 

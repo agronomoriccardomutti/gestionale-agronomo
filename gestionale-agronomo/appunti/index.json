@@ -6,7 +6,29 @@
   "argomento": "Unità A1 · Zanichelli Carte, misure, rilievi vol. 1",
   "tipo": "Appunti + esercizi svolti",
   "data": "2026-11-26",
-  "link": "appunti/a1-angoli.html"
+  "link": "appunti/a1-angoli.html",
+  "sezioni": [
+   {
+    "id": "teoria",
+    "titolo": "1. Teoria essenziale"
+   },
+   {
+    "id": "formule",
+    "titolo": "2. Formule di conversione"
+   },
+   {
+    "id": "problemi",
+    "titolo": "3. Problemi svolti su casi reali"
+   },
+   {
+    "id": "esercizi",
+    "titolo": "4. Esercizi proposti con soluzioni"
+   },
+   {
+    "id": "excel",
+    "titolo": "5. Foglio Excel di conversione"
+   }
+  ]
  },
  {
   "titolo": "A2 – Le funzioni goniometriche",
@@ -15,6 +37,36 @@
   "argomento": "Unità A2 · Zanichelli Carte, misure, rilievi vol. 1",
   "tipo": "Appunti + esercizi svolti",
   "data": "2026-11-26",
-  "link": "appunti/a2-funzioni-goniometriche.html"
+  "link": "appunti/a2-funzioni-goniometriche.html",
+  "sezioni": [
+   {
+    "id": "sc",
+    "titolo": "1. Le funzioni seno e coseno"
+   },
+   {
+    "id": "tc",
+    "titolo": "2. Le funzioni tangente e cotangente"
+   },
+   {
+    "id": "tr",
+    "titolo": "3. Risoluzione dei triangoli rettangoli"
+   },
+   {
+    "id": "sn",
+    "titolo": "4. Seno e coseno nella risoluzione dei triangoli rettangoli"
+   },
+   {
+    "id": "tn",
+    "titolo": "5. Tangente e cotangente nella risoluzione dei triangoli rettangoli"
+   },
+   {
+    "id": "excel",
+    "titolo": "6. Esercitazione di Excel: seno e coseno"
+   },
+   {
+    "id": "verifica",
+    "titolo": "7. Verifica delle competenze – esercizi a pagina 45 del libro"
+   }
+  ]
  }
 ]

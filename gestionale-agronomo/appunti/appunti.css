@@ -10,3 +10,7 @@ details{margin:.5em 0}summary{cursor:pointer;font-weight:700;color:#3d5a28;paddi
 .err li{margin:.3em 0}code{background:#eef2e8;padding:0 4px;border-radius:4px}
 @media(prefers-color-scheme:dark){body{background:#161a14;color:#e4eadd}table,.box,.formula,.sv,nav.toc{background:#1f261b;border-color:#3a4a30}th{background:#2a3523}h3,summary,.top a,nav.toc a{color:#a9cf88}.ris{background:#2a3a20}code{background:#2a3523}h2{border-color:#6b8e4e}}
 @media print{body{background:#fff;color:#000}.top,nav.toc{display:none}details{display:block}details>*{display:block}.sv{break-inside:avoid}}
+.vf{display:inline-block;margin:-.2em 0 .6em;padding:3px 10px;border:1px solid #6b8e4e;border-radius:999px;font-size:.85rem;cursor:pointer;background:#fff;color:#3d5a28}
+.vf input{margin-right:4px;vertical-align:middle}.vf-on{background:#eaf3dc}.vf-sum{margin:8px 0;font-size:.9rem;color:#3d5a28}
+@media(prefers-color-scheme:dark){.vf{background:#1f261b;color:#a9cf88}.vf-on{background:#2a3a20}.vf-sum{color:#a9cf88}}
+@media print{.vf,.vf-sum{display:none}}

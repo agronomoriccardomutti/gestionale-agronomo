@@ -5,6 +5,16 @@
   function load() { try { return JSON.parse(localStorage.getItem(K)) || {}; } catch (e) { return {}; } }
   function save(o) { try { localStorage.setItem(K, JSON.stringify(o)); } catch (e) {} }
   var st = load(), cur = st[page] || [];
+  var MK = 'gestionale-appunti-meta';
+  function mload() { try { return JSON.parse(localStorage.getItem(MK)) || {}; } catch (e) { return {}; } }
+  var meta = (mload()[page] || {});
+  var mb = document.createElement('div'); mb.className = 'meta';
+  mb.innerHTML = '<label>📅 Data <input type="date"></label><label class="mn">📝 Nota <textarea rows="2" placeholder="Nota per questi appunti…"></textarea></label>';
+  var di = mb.querySelector('input'), tn = mb.querySelector('textarea');
+  var dm = document.querySelector('meta[name="appunti-data"]'); di.value = meta.data || (dm ? dm.content : ''); tn.value = meta.nota || '';
+  function msave() { var a = mload(); a[page] = { data: di.value, nota: tn.value.trim() }; try { localStorage.setItem(MK, JSON.stringify(a)); } catch (e) {} }
+  di.onchange = msave; tn.oninput = msave;
+  var h1 = document.querySelector('main h1'); if (h1) h1.after(mb);
   var bar = document.createElement('div'); bar.className = 'vf-sum';
   var nav = document.querySelector('nav.toc'); if (nav) nav.after(bar);
   function sum() { bar.textContent = cur.length ? '🎯 Per la verifica: ' + cur.length + (cur.length === 1 ? ' argomento scelto' : ' argomenti scelti') : '🎯 Spunta «Usa per la verifica» sugli argomenti da inserire nella verifica.'; }

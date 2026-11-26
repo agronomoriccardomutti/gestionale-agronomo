@@ -14,3 +14,5 @@ details{margin:.5em 0}summary{cursor:pointer;font-weight:700;color:#3d5a28;paddi
 .vf input{margin-right:4px;vertical-align:middle}.vf-on{background:#eaf3dc}.vf-sum{margin:8px 0;font-size:.9rem;color:#3d5a28}
 @media(prefers-color-scheme:dark){.vf{background:#1f261b;color:#a9cf88}.vf-on{background:#2a3a20}.vf-sum{color:#a9cf88}}
 @media print{.vf,.vf-sum{display:none}}
+.meta{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin:6px 0 10px}.meta label{font-size:.9rem}.meta .mn{flex:1;min-width:220px}.meta textarea{width:100%;font:inherit;border:1px solid #c5d3b6;border-radius:6px;padding:4px 6px;background:transparent;color:inherit}.meta input{font:inherit}
+@media print{.meta input,.meta textarea{border:0}}

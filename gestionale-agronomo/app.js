@@ -1974,13 +1974,17 @@
   const VER_K = 'gestionale-verifica-appunti'; // argomenti scelti per la verifica (salvati su questo dispositivo; le pagine di appunti scrivono la stessa chiave)
   const verLoad = () => { try { return JSON.parse(localStorage.getItem(VER_K)) || {}; } catch (e) { return {}; } };
   const verSave = (o) => { try { localStorage.setItem(VER_K, JSON.stringify(o)); } catch (e) { /* storage non disponibile */ } };
+  const META_K = 'gestionale-appunti-meta'; // data e nota delle pagine pubblicate (stessa chiave usata dentro le pagine)
+  const metaLoad = () => { try { return JSON.parse(localStorage.getItem(META_K)) || {}; } catch (e) { return {}; } };
+  const pageKey = (link) => (link || '').split('/').pop().replace(/\.html$/, '');
   function viewAppunti() {
     if (!APPUNTI_SITO.list && !APPUNTI_SITO.busy) {
       APPUNTI_SITO.busy = true;
       fetch('appunti/index.json').then((r) => (r.ok ? r.json() : [])).catch(() => []).then((j) => { APPUNTI_SITO.list = Array.isArray(j) ? j : []; if (/#\/scuola\/appunti/.test(location.hash)) route(); });
     }
     const classeNome = (c) => rows('classi').find((x) => normCl(x.nome) === normCl(c));
-    const sito = (APPUNTI_SITO.list || []).map((p, i) => ({ id: 'sito' + i, titolo: p.titolo, argomento: p.argomento, materia: p.materia, tipo: p.tipo, data: p.data, link: p.link, note: p.note, classe: (classeNome(p.classe) || {}).id, classeTxt: p.classe, sito: true }));
+    const meta = metaLoad();
+    const sito = (APPUNTI_SITO.list || []).map((p, i) => ({ id: 'sito' + i, titolo: p.titolo, argomento: p.argomento, materia: p.materia, tipo: p.tipo, data: (meta[pageKey(p.link)] || {}).data || p.data, link: p.link, nota: (meta[pageKey(p.link)] || {}).nota, note: p.note, classe: (classeNome(p.classe) || {}).id, classeTxt: p.classe, sito: true }));
     const all = rows('appunti').concat(sito).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
     const g = ui.apg || 'classe', nz = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const classeOf = (r) => (r.classe && lab('classi', r.classe)) || r.classeTxt || 'Senza classe', matOf = (r) => (r.materia || '').trim() || 'Senza materia';
@@ -1999,13 +2003,22 @@
             return h('label', { class: 'row', style: 'cursor:pointer' }, c, h('span', { class: 't' }, ' ' + x.titolo), h('a', { href: p.link + '#' + x.id, target: '_blank', rel: 'noopener' }, '📖')); }))));
     };
     const verN = (r) => (r.sito && r.link ? (verLoad()[r.link.split('/').pop().replace(/\.html$/, '')] || []).length : 0);
+    const editSito = (r) => {
+      const dlg = document.getElementById('dlg'); dlg.replaceChildren();
+      const k = pageKey(r.link), m = metaLoad()[k] || {}, d = h('input', { type: 'date', name: 'data' }), t = h('textarea', { name: 'nota', rows: '5' });
+      d.value = m.data || r.data || ''; t.value = m.nota || '';
+      dlg.append(h('form', { class: 'dlg-in', method: 'dialog' }, h('h2', {}, 'Data e nota: ' + (r.titolo || 'Appunti')),
+        h('label', {}, 'Data', d), h('label', {}, 'Nota', t),
+        h('div', { class: 'bar' }, btn('Salva', () => { const all2 = metaLoad(); all2[k] = { data: d.value, nota: t.value.trim() }; try { localStorage.setItem(META_K, JSON.stringify(all2)); } catch (e) { /* storage non disponibile */ } dlg.close(); route(); }, 'pri'), btn('Annulla', () => dlg.close()))));
+      dlg.showModal();
+    };
     const open = (r) => { if (r.link) window.open(r.link, '_blank', 'noopener'); else openForm('appunti', r); };
     const rowOf = (r) => h('div', { class: 'row', tabindex: '0', onclick: () => open(r), onkeydown: (e) => { if (e.key === 'Enter') open(r); } },
-      h('span', { class: 't' }, r.titolo || r.argomento || 'Appunti', h('div', { class: 'note' }, [r.argomento && r.titolo ? r.argomento : '', g !== 'classe' ? (r.classe || r.classeTxt ? classeOf(r) : '') : '', g !== 'materia' ? r.materia : '', r.tipo, r.data ? L.fmtDate(r.data) : '', verN(r) ? '🎯 ' + verN(r) + ' per la verifica' : ''].filter(Boolean).join(' · '))),
+      h('span', { class: 't' }, r.titolo || r.argomento || 'Appunti', h('div', { class: 'note' }, [r.argomento && r.titolo ? r.argomento : '', g !== 'classe' ? (r.classe || r.classeTxt ? classeOf(r) : '') : '', g !== 'materia' ? r.materia : '', r.tipo, r.data ? L.fmtDate(r.data) : '', verN(r) ? '🎯 ' + verN(r) + ' per la verifica' : ''].filter(Boolean).join(' · ')), r.sito && r.nota ? h('div', { class: 'note' }, '📝 ' + r.nota) : null),
       r.link ? h('a', { href: r.link, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '📖 Apri') : h('span', { class: 'tag' }, 'senza link'),
-      r.sito ? h('span', { class: 'tag', title: 'Pubblicato sul sito' }, '🌐') : h('button', { type: 'button', class: 'gz', title: 'Modifica', onclick: (e) => { e.stopPropagation(); openForm('appunti', r); } }, '✏️'));
+      r.sito ? h('button', { type: 'button', class: 'gz', title: 'Data e nota (pagina pubblicata 🌐)', onclick: (e) => { e.stopPropagation(); editSito(r); } }, '✏️') : h('button', { type: 'button', class: 'gz', title: 'Modifica', onclick: (e) => { e.stopPropagation(); openForm('appunti', r); } }, '✏️'));
     const draw = () => {
-      const q = nz(ui.apq).split(/\s+/).filter(Boolean), items = all.filter((r) => q.every((t) => nz([r.titolo, r.argomento, r.materia, r.tipo, r.note, r.classe || r.classeTxt ? classeOf(r) : ''].join(' ')).includes(t)));
+      const q = nz(ui.apq).split(/\s+/).filter(Boolean), items = all.filter((r) => q.every((t) => nz([r.titolo, r.argomento, r.materia, r.tipo, r.note, r.nota, r.classe || r.classeTxt ? classeOf(r) : ''].join(' ')).includes(t)));
       let out;
       if (g === 'recenti') out = [h('div', { class: 'inc-l' }, items.map(rowOf))];
       else { const m = new Map(); items.forEach((r) => { const k = g === 'materia' ? matOf(r) : classeOf(r); (m.has(k) ? m.get(k) : m.set(k, []).get(k)).push(r); });

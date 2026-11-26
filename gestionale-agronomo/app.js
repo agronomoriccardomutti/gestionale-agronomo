@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -660,6 +660,8 @@
       o.data[k] = Array.isArray(o.data[k]) ? o.data[k] : [];
       for (const r of o.data[k]) if (!r.updated) r.updated = now;
     }
+    // spese e ricorrenti ora si sincronizzano: una tantum le segno come "da inviare" (altrimenti restano fuori dal primo invio)
+    if (!o.meta.spSync) { o.meta.spSync = 1; for (const k of ['movimenti', 'ricorrenti']) for (const r of o.data[k]) r.updated = now; }
     // migrazione: trimestre (testo) -> periodo; stato "Eseguita" -> "Svolta"
     const byTri = {};
     for (const ek of ['piano', 'ispezioni']) for (const r of o.data[ek]) {
@@ -2433,7 +2435,7 @@
   const djb = (t) => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
   function feedICS() {
     const from = L.addDays(L.today(), -14);
-    const ev = allEvents().filter((e) => !e.done && synced(e.entKey) && e.date >= from).sort(cmpEv);
+    const ev = allEvents().filter((e) => !e.done && synced(e.entKey) && e.entKey !== 'ricorrenti' && e.date >= from).sort(cmpEv);
     return L.buildICS(ev, Object.assign(icsOpts(), { name: 'Gestionale Agronomo' })).replace('METHOD:PUBLISH', 'METHOD:PUBLISH\r\nX-PUBLISHED-TTL:PT1H\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H');
   }
   async function putFeed(text, retried) {

@@ -524,6 +524,21 @@
       title: (r) => (r.tipo === 'Dipartimento Scienze Agrarie' ? 'Dipartimento Sc. Agrarie' : 'CdC ' + (lab('classi', r.classe) || '')) + ' – verbale n. ' + (r.numero || '?'),
       cols: ['tipo', 'data'], detail: (r) => '#/scuola/verbale/' + r.id,
     },
+    appunti: {
+      label: 'Appunti', one: 'pagina di appunti', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'titolo', l: 'Titolo', t: 'text', hint: 'Es. «Appunti 3ª – A1 Gli angoli e la loro misura».' },
+        { k: 'link', l: 'Link alla pagina', t: 'url', hint: 'Incolla l’indirizzo del documento (Claude, Drive, Notion…).' },
+        { k: 'classe', l: 'Classe', t: 'ref', to: 'classi' },
+        { k: 'materia', l: 'Materia', t: 'text', list: ['Genio Rurale', 'Industrie agrarie'], learn: 1 },
+        { k: 'argomento', l: 'Unità / argomento', t: 'text', hint: 'Es. «A1 – Gli angoli».' },
+        { k: 'tipo', l: 'Tipo', t: 'text', list: ['Appunti', 'Esercizi', 'Verifica', 'Scheda', 'Slide', 'Laboratorio'], learn: 1 },
+        { k: 'data', l: 'Data', t: 'date', def: 'today' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      dlg: { name: () => 'pagina di appunti', wide: true, focus: 'titolo', rows: [['classe', 'materia'], ['argomento', 'tipo']], sections: { titolo: 'Pagina', classe: 'Classificazione', note: 'Note' } },
+      title: (r) => r.titolo || r.argomento || 'Appunti', cols: ['classe', 'materia', 'tipo', 'data'],
+      actions: [{ label: '📖 Apri', show: (r) => !!r.link, fn: (r) => window.open(r.link, '_blank', 'noopener') }],
+    },
     studenti: {
       label: 'Studenti', one: 'studente', order: { k: 'nome', dir: 1 },
       fields: [
@@ -590,7 +605,7 @@
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture', 'versamenti'] },
-    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
+    { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'appunti', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
     { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
@@ -1067,7 +1082,7 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
@@ -1909,6 +1924,30 @@
       h('thead', {}, h('tr', {}, ['Nota spese', 'Data nota', 'Invio nota spese', 'Rimborso km', 'Autostrada', 'Totale rimborso', 'Ispezioni', 'Totale', 'Fattura emessa', '60 gg', 'Data pagamento', 'EPAP 4%', 'Bollo', 'Totale fattura', 'Stato'].map((x) => h('th', {}, x)))),
       h('tbody', {}, body), h('tfoot', {}, h('tr', {}, h('td', { colspan: 3 }, 'Σ'), ...[T.km, T.aut, T.rimb, T.isp, T.tot].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', { colspan: 3 }), ...[T.epap, T.bollo, T.fatt].map((x) => h('td', { class: 'r' }, L.eur(r2(x)))), h('td', {}))))));
     return root;
+  }
+
+  function viewAppunti() {
+    const all = rows('appunti').slice().sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+    const g = ui.apg || 'classe', nz = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const classeOf = (r) => (r.classe && lab('classi', r.classe)) || 'Senza classe', matOf = (r) => (r.materia || '').trim() || 'Senza materia';
+    const list = h('div', {});
+    const open = (r) => { if (r.link) window.open(r.link, '_blank', 'noopener'); else openForm('appunti', r); };
+    const rowOf = (r) => h('div', { class: 'row', tabindex: '0', onclick: () => open(r), onkeydown: (e) => { if (e.key === 'Enter') open(r); } },
+      h('span', { class: 't' }, r.titolo || r.argomento || 'Appunti', h('div', { class: 'note' }, [r.argomento && r.titolo ? r.argomento : '', g !== 'classe' ? (r.classe ? classeOf(r) : '') : '', g !== 'materia' ? r.materia : '', r.tipo, r.data ? L.fmtDate(r.data) : ''].filter(Boolean).join(' · '))),
+      r.link ? h('a', { href: r.link, target: '_blank', rel: 'noopener', onclick: (e) => e.stopPropagation() }, '📖 Apri') : h('span', { class: 'tag' }, 'senza link'),
+      h('button', { type: 'button', class: 'gz', title: 'Modifica', onclick: (e) => { e.stopPropagation(); openForm('appunti', r); } }, '✏️'));
+    const draw = () => {
+      const q = nz(ui.apq).split(/\s+/).filter(Boolean), items = all.filter((r) => q.every((t) => nz([r.titolo, r.argomento, r.materia, r.tipo, r.note, r.classe ? classeOf(r) : ''].join(' ')).includes(t)));
+      let out;
+      if (g === 'recenti') out = [h('div', { class: 'inc-l' }, items.map(rowOf))];
+      else { const m = new Map(); items.forEach((r) => { const k = g === 'materia' ? matOf(r) : classeOf(r); (m.has(k) ? m.get(k) : m.set(k, []).get(k)).push(r); });
+        out = [...m.entries()].sort((x, y) => (/^Senza /.test(x[0]) ? 1 : 0) - (/^Senza /.test(y[0]) ? 1 : 0) || x[0].localeCompare(y[0], 'it', { numeric: true })).map(([k, arr]) => h('details', { class: 'inc-c', open: '' }, h('summary', {}, h('span', { class: 't' }, k, h('span', { class: 'az-n' }, arr.length))), h('div', { class: 'inc-l' }, arr.map(rowOf)))); }
+      list.replaceChildren(h('p', { class: 'note' }, items.length + ' pagine' + (q.length ? ' trovate' : '')), ...(out.length ? out : [h('div', { class: 'empty' }, 'Nessuna pagina di appunti.')]));
+    };
+    draw();
+    return h('div', {}, h('div', { class: 'bar' }, btn('+ Nuova pagina di appunti', () => openForm('appunti', null), 'pri')),
+      h('div', { class: 'chips' }, h('span', { class: 'note' }, 'Raggruppa per:'), [['classe', 'Classe'], ['materia', 'Materia'], ['recenti', 'Più recenti']].map(([k, l]) => h('a', { class: 'chip' + (g === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.apg = k; route(); } }, l))),
+      h('input', { type: 'search', class: 'az-q', placeholder: 'Cerca negli appunti…', value: ui.apq || '', 'aria-label': 'Cerca appunti', oninput: (e) => { ui.apq = e.target.value; draw(); } }), list);
   }
 
   function viewPeriodi() {

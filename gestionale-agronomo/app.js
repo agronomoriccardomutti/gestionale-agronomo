@@ -113,7 +113,7 @@
   const gmailSearch = (q) => 'https://mail.google.com/mail/u/0/#search/' + encodeURIComponent(q);
   const gmailCompose = (to, subj) => 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to) + (subj ? '&su=' + encodeURIComponent(subj) : '');
   const gmailActions = [{ label: '✉️ Scrivi (Gmail)', show: (r) => !!r.email, href: (r) => gmailCompose(r.email) }, { label: '🔍 Mail in Gmail', show: (r) => !!(r.email || r.nome || r.cognome || r.ragione), href: (r) => gmailSearch(r.email ? 'from:' + r.email + ' OR to:' + r.email : '"' + ([r.cognome, r.nome].filter(Boolean).join(' ') || r.ragione) + '"') }];
-  const SP_CAT = ['Spesa alimentare','Carburante','Manutenzione veicoli','Assicurazione/Bollo','Casa/Utenze','Telefono/Internet','Farmacia','Salute','Abbigliamento','Bar','Ristoranti/Svago','Regali','Libri/Cultura','Figlie','Abbonamenti','Rate/Finanziamenti','Tasse/Imposte','Altro'];
+  const SP_CAT = ['Spesa alimentare','Carburante','Manutenzione veicoli','Assicurazione/Bollo','Casa/Utenze','Telefono/Internet','Farmacia','Salute','Abbigliamento','Bar','Ristoranti/Svago','Regali','Libri/Cultura','Amazon','Figlie','Abbonamenti','Rate/Finanziamenti','Tasse/Imposte','Altro'];
   const SP_CAT_ALL = SP_CAT.concat(['Stipendio', 'Consulenze agronomo', 'Rimborsi', 'Regali ricevuti', 'Altre entrate', 'Prelievo contanti']);
   const SP_VEI = ['Nissan', 'Jeep Compass', 'Africa Twin', 'Trattore Landini'];
   const ENT = {

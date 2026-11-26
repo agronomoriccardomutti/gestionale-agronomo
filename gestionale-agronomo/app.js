@@ -1541,7 +1541,7 @@
   }
 
   /* ---------- Spese personali (periodo dal 23 al 22) ---------- */
-  const SP = { per: '', q: '', tipo: 'Uscita', conf: null, rconf: null };
+  const SP = { per: '', q: '', ord: 'data', tipo: 'Uscita', conf: null, rconf: null };
   const SP_G = 23, pad2 = (n) => String(n).padStart(2, '0');
   const spIso = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const spPer = (s) => { let [y, m, d] = s.split('-').map(Number); if (d < SP_G) { m -= 1; if (m === 0) { m = 12; y -= 1; } } return y + '-' + pad2(m) + '-' + pad2(SP_G); };
@@ -1734,7 +1734,7 @@
     const fl = (l, el, cls) => h('div', { class: 'fld' + (cls ? ' ' + cls : '') }, h('label', {}, l), el);
     const catSel = SP.tipo !== 'Prelievo' ? sel('categoria', catList, catList[0]) : null, vei = h('select', {}, h('option', { value: '' }, '—'), SP_VEI.map((o) => h('option', { value: o }, o))); mk('veicolo', vei);
     const veiFld = SP.tipo === 'Uscita' ? fl('Veicolo', vei) : null; if (veiFld) { const upd = () => { veiFld.hidden = !['Carburante', 'Manutenzione veicoli', 'Assicurazione/Bollo'].includes(catSel.value); }; catSel.addEventListener('change', upd); upd(); }
-    const dt = mk('data', h('input', { type: 'date', value: T })), im = mk('importo', h('input', { type: 'number', step: '0.01', min: '0', inputmode: 'decimal', placeholder: '0,00' })), ds = mk('descrizione', h('input', { type: 'text', placeholder: SP.tipo === 'Entrata' ? 'es. Consulenza' : 'es. Gasolio, Spesa' }));
+    const dt = mk('data', h('input', { type: 'date', value: T })), im = mk('importo', h('input', { type: 'number', step: '0.01', min: '0', inputmode: 'decimal', placeholder: '0,00' })), ds = mk('descrizione', h('input', { type: 'text', list: 'sp-desc', autocomplete: 'off', placeholder: SP.tipo === 'Entrata' ? 'es. Consulenza' : 'es. Gasolio, Spesa' }));
     const met = SP.tipo !== 'Prelievo' ? sel('metodo', ['Contanti', 'Carta', 'Bonifico'], SP.tipo === 'Entrata' ? 'Bonifico' : 'Contanti') : null;
     if (ds && catSel) {
       let manual = false, auto = false; catSel.addEventListener('change', () => { if (!auto) manual = true; });
@@ -1757,10 +1757,12 @@
     // movimenti
     const lst = h('div'); const draw = () => {
       const q = SP.q.trim().toLowerCase();
-      const list = mov.filter((m) => m.data && spPer(m.data) === key && (!q || ((m.descrizione || '') + ' ' + (m.categoria || '') + ' ' + (m.veicolo || '')).toLowerCase().includes(q))).sort((x, y) => (y.data || '').localeCompare(x.data || ''));
+      const list = mov.filter((m) => m.data && spPer(m.data) === key && (!q || ((m.descrizione || '') + ' ' + (m.categoria || '') + ' ' + (m.veicolo || '')).toLowerCase().includes(q))).sort((x, y) => SP.ord === 'az' ? (x.descrizione || '').localeCompare(y.descrizione || '', 'it', { sensitivity: 'base' }) || (y.data || '').localeCompare(x.data || '') : (y.data || '').localeCompare(x.data || ''));
       lst.replaceChildren(...(list.length ? list.map((m) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('movimenti', m) }, h('span', { class: 'date' }, spBrev(m.data)), h('span', { class: 't' }, m.descrizione + (m.veicolo ? ' · ' + m.veicolo : ''), h('div', { class: 'note' }, [m.categoria, m.tipo === 'Prelievo' ? 'Prelievo' : m.metodo].filter(Boolean).join(' · '))), h('b', { class: m.tipo === 'Entrata' ? 'pos' : '' }, (m.tipo === 'Entrata' ? '+' : m.tipo === 'Uscita' ? '−' : '') + L.eur(+m.importo || 0)))) : [h('p', { class: 'note' }, 'Nessun movimento.')]));
     };
-    body.append(h('div', { class: 'az-h' }, h('h3', {}, 'Movimenti', h('span', { class: 'az-n' }, mov.filter((m) => m.data && spPer(m.data) === key).length)), h('input', { type: 'search', placeholder: 'Cerca…', value: SP.q, oninput: (e) => { SP.q = e.target.value; draw(); } })), lst);
+    body.append(h('div', { class: 'az-h' }, h('h3', {}, 'Movimenti', h('span', { class: 'az-n' }, mov.filter((m) => m.data && spPer(m.data) === key).length)), h('input', { type: 'search', placeholder: 'Cerca…', value: SP.q, oninput: (e) => { SP.q = e.target.value; draw(); } }), h('select', { 'aria-label': 'Ordine', onchange: (e) => { SP.ord = e.target.value; draw(); } }, h('option', { value: 'data' }, 'Per data'), h('option', { value: 'az' }, 'A–Z descrizione'))), lst);
+    { const so = body.querySelector('select[aria-label=Ordine]'); if (so) so.value = SP.ord; }
+    body.append(h('datalist', { id: 'sp-desc' }, [...new Map(mov.filter((m) => m.descrizione && (!SP.tipo || m.tipo === SP.tipo)).map((m) => [m.descrizione.trim().toLowerCase(), m.descrizione.trim()])).values()].sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' })).map((d) => h('option', { value: d }))));
     draw();
     return root;
   }

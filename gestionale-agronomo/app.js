@@ -1876,6 +1876,8 @@
     const updateRow = (st) => {
       const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
       t.tot.replaceChildren(cv.any ? h('div', { class: 'ptot' }, h('b', {}, fmt1(cv.tot)), h('span', { class: 'pbar' }, h('i', { style: 'width:' + Math.min(100, Math.round(cv.tot / (m || 1) * 100)) + '%' }))) : ''); t.hyp.replaceChildren(votoEl(cv.hyp));
+      const tr = t.tot.parentElement; // in rosso i campi ancora da compilare (punti e voto finale) per chi è presente
+      if (tr) tr.querySelectorAll('input.score, select[aria-label^="Voto finale"]').forEach((el) => el.classList.toggle('vuoto', !tr.classList.contains('abs') && el.value === ''));
     };
     const head = h('tr', {}, h('th', {}, 'Studente'), parts.map((p) => h('th', {}, p.name, h('div', { class: 'note' }, 'max ' + L.num(p.max)))),
       h('th', {}, 'Punti', h('div', { class: 'note' }, '/ ' + L.num(m))), h('th', {}, 'Voto'), h('th', {}, 'Voto finale'));

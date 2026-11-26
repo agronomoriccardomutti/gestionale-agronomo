@@ -417,3 +417,7 @@ details.ns{padding:0}.ns>summary{list-style:none;cursor:pointer;padding:12px 14p
 .docf-i{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--bd);border-radius:12px}.docf-i .t{flex:1;min-width:140px;word-break:break-all}.docf-i small{color:var(--mut)}
 .vs-cat{display:grid;gap:10px;margin-bottom:18px}.vs-r{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center}.vs-bar{grid-column:1/-1;height:6px;border-radius:6px;background:var(--chip);overflow:hidden}.vs-bar i{display:block;height:100%;background:var(--pri);border-radius:6px}
 .vs-pdf{border:0;background:var(--chip);box-shadow:none;border-radius:10px;padding:6px 10px;font-size:16px;text-decoration:none;cursor:pointer}
+
+/* correzione: campi non ancora compilati */
+table.cor input.score.vuoto,table.cor select.vuoto{border:1.5px solid #d64545;background:#fdecec}
+@media (prefers-color-scheme:dark){table.cor input.score.vuoto,table.cor select.vuoto{border-color:#e06666;background:#3a1f1f}}

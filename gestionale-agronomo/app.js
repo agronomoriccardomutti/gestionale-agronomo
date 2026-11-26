@@ -652,7 +652,7 @@
   function normalize(o) {
     o = o && typeof o === 'object' ? o : {};
     o.version = 1;
-    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, calFeed: false, partenza: 'San Salvatore Monferrato' }, o.settings);
+    o.settings = Object.assign({ alarmDays: 1, alarmTime: '09:00', durationMin: 60, soglia: 85000, calFeed: false, contantiMese: 500, partenza: 'San Salvatore Monferrato' }, o.settings);
     o.data = o.data && typeof o.data === 'object' ? o.data : {};
     for (const c of (o.data.classi || [])) if (/^3[AB]$/.test(String(c.nome || '').toUpperCase().replace(/[^0-9A-Z]/g, '')) && /^\s*genio rurale\s*$/i.test(c.materia || '')) { c.materia = 'Genio Rurale, Industrie agrarie'; c.updated = new Date().toISOString(); }
     o.meta = Object.assign({ lastPull: '', lastPush: '', lastSync: '', feedHash: '', feedAt: '', deleted: [] }, o.meta);
@@ -1637,7 +1637,7 @@
       h('div', { class: 'kv' }, [['Uscite previste', L.eur(f.uscite)], ['Già speso', L.eur(f.fixCur + f.varAtt)], ['Variabili ancora attese', L.eur(Math.max(0, f.varStima - f.varAtt))], ['Ricorrenti in scadenza', L.eur(f.fixUp)], ['Prossimo periodo (stima)', L.eur(f.prossimo)]].map(([l, v]) => h('div', {}, h('small', {}, l), v))),
       f.cats.length ? h('div', { class: 'sp-pvl' }, rowsC) : null,
       consigli.length ? h('ul', { class: 'sp-tips' }, consigli.map((x) => h('li', {}, x))) : null,
-      h('p', { class: 'note' }, 'Attendibilità ' + f.attendibile + ': stima basata ' + fonte + '. Calcolata sul telefono, nessun dato esce dal dispositivo.'));
+      h('p', { class: 'note' }, 'Attendibilità ' + f.attendibile + ': stima basata ' + fonte + '. Calcolata sul dispositivo dai tuoi movimenti.'));
   };
   const spAddM = (s, n) => { const [y, m, d] = s.split('-').map(Number); const t = new Date(y, m - 1 + n, 1), last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(); return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(Math.min(d, last)); };
   function spTot(key) {
@@ -1648,6 +1648,12 @@
     }
     t.entrate = r2(t.entrate); t.uscite = r2(t.uscite); t.saldo = r2(t.entrate - t.uscite); return t;
   }
+  // budget contanti del periodo: prelievo mensile fisso, speso = uscite pagate in contanti, residuo = ancora da spendere (tolto dal budget settimanale)
+  const spCashPer = (key) => {
+    const B = +(db.settings && db.settings.contantiMese) || 0; let prel = 0, spesi = 0;
+    for (const m of rows('movimenti')) { if (!m.data || spPer(m.data) !== key) continue; const v = +m.importo || 0; if (m.tipo === 'Prelievo') prel += v; else if (m.tipo === 'Uscita' && m.metodo === 'Contanti') spesi += v; }
+    return { B, prel: r2(prel), spesi: r2(spesi), res: r2(Math.max(0, B - spesi)) };
+  };
   const spCash = () => { let p = 0, s = 0; for (const m of rows('movimenti')) { const v = +m.importo || 0; if (m.tipo === 'Prelievo') p += v; else if (m.tipo === 'Uscita' && m.metodo === 'Contanti') s += v; } return r2(p - s); };
   const spLastStip = () => { const s = rows('movimenti').filter((m) => m.tipo === 'Entrata' && m.categoria === 'Stipendio').sort((x, y) => (y.data || '').localeCompare(x.data || '')); return s.length ? +s[0].importo : null; };
   const spReserve = (key) => { let tot = 0; for (const r of rows('ricorrenti')) { const q = (+r.importo || 0) / (+r.mesi || 1); let pg = 0; for (const m of rows('movimenti')) if (m.ricorrenteId === r.id && m.tipo === 'Uscita' && m.data && spPer(m.data) === key) pg += +m.importo || 0; tot += Math.max(0, q - pg); } return r2(tot); };
@@ -1703,13 +1709,17 @@
       const d = h('input', { type: 'date', value: T >= key && T <= spEnd(key) ? T : key }), im = h('input', { type: 'number', step: '0.01', inputmode: 'decimal', placeholder: 'Importo €', value: spLastStip() || '' });
       body.append(h('div', { class: 'sp-ban' }, h('div', {}, h('b', {}, 'Nuovo periodo. '), 'Inserisci lo stipendio per far partire il conteggio.'), h('div', { class: 'bar' }, d, im, btn('📧 Da mail', () => openStipendioConferma('', ''), ''), btn('Registra stipendio', () => { const v = +String(im.value).replace(',', '.'); if (!d.value || !(v > 0)) return toast('Data e importo'); mov.push({ id: uid(), tipo: 'Entrata', data: d.value, importo: r2(v), descrizione: 'Stipendio', categoria: 'Stipendio', metodo: 'Bonifico', veicolo: '', updated: NOW() }); save(); route(); }, 'pri'))));
     }
-    const quota = t.entrate > 0 ? t.uscite / t.entrate : 0;
-    body.append(tiles([['Entrate', L.eur(t.entrate)], ['Uscite', L.eur(t.uscite) + (t.entrate > 0 ? ' (' + Math.round(quota * 100) + '%)' : ''), quota > 1], ['Disponibile', L.eur(t.saldo), t.saldo < 0], ['Contanti', L.eur(spCash())]]));
+    const quota = t.entrate > 0 ? t.uscite / t.entrate : 0, cp = spCashPer(key);
+    if (isCur && cp.B > 0 && !cp.prel) {
+      body.append(h('div', { class: 'sp-ban' }, h('div', {}, h('b', {}, 'Prelievo contanti del mese. '), 'Registra i ' + L.eur(cp.B) + ' prelevati: li tengo da parte nel budget e ti dico quanti ne restano.'),
+        h('div', { class: 'bar' }, btn('Registra prelievo ' + L.eur(cp.B), () => { rows('movimenti').push({ id: uid(), tipo: 'Prelievo', data: L.today(), importo: cp.B, descrizione: 'Prelievo contanti', categoria: 'Prelievo contanti', metodo: 'Contanti', veicolo: '', updated: NOW() }); save(); route(); toast('Prelievo registrato'); }, 'pri'))));
+    }
+    body.append(tiles([['Entrate', L.eur(t.entrate)], ['Uscite', L.eur(t.uscite) + (t.entrate > 0 ? ' (' + Math.round(quota * 100) + '%)' : ''), quota > 1], ['Disponibile', L.eur(t.saldo), t.saldo < 0], ['Contanti', (cp.B > 0 ? L.eur(cp.res) + ' su ' + L.eur(cp.B) : L.eur(spCash())), cp.B > 0 && cp.spesi > cp.B]]));
     // budget settimanale
     const wk = h('div', { class: 'sp-week' }); const wOut = h('div'); const acc = h('input', { type: 'number', step: '10', min: '0', inputmode: 'decimal', placeholder: '0', value: db.settings.accantonare || '' });
     const drawWeek = () => {
       if (!isCur) { const sett = spDays(key, spShift(key, 1)) / 7; wOut.replaceChildren(h('div', { class: 'sp-big' }, L.eur(t.uscite / sett)), h('p', { class: 'note' }, 'Spesa media a settimana (uscite ÷ ' + fmt1(sett) + ' settimane).')); return; }
-      const stim = t.entrate <= 0, ent = stim ? (spLastStip() || 0) : t.entrate, risp = +String(acc.value).replace(',', '.') || 0, riserva = spReserve(key), accT = risp + riserva;
+      const stim = t.entrate <= 0, ent = stim ? (spLastStip() || 0) : t.entrate, risp = +String(acc.value).replace(',', '.') || 0, riserva = spReserve(key), cashRes = spCashPer(key).res, accT = risp + riserva + cashRes;
       const giorni = Math.max(1, spDays(T, spShift(key, 1))), resto = r2(ent - accT - t.uscite), sett = resto / giorni * 7;
       const d = new Date(), lun = new Date(d); lun.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const ini = spIso(lun) < key ? key : spIso(lun);
       let spSett = 0; for (const m of mov) if (m.tipo === 'Uscita' && m.data >= ini && m.data <= T) spSett += +m.importo || 0; spSett = r2(spSett);
@@ -1718,10 +1728,12 @@
         h('p', { class: 'note' }, resto < 0 ? 'Hai già superato il limite del periodo di ' + L.eur(-resto) + '.' : giorni >= 7 ? 'Circa ' + L.eur(resto / giorni) + ' al giorno per i prossimi ' + giorni + ' giorni, fino al ' + spBrev(spEnd(key)) + '.' + (stim ? ' Stima sull’ultimo stipendio.' : '') : 'Restano ' + giorni + ' giorni: puoi spendere ancora questa somma fino al ' + spBrev(spEnd(key)) + '.'),
         h('div', { class: 'sp-bar' + (q > 1 ? ' over' : '') }, h('i', { style: 'width:' + Math.min(100, q * 100) + '%' })),
         h('p', { class: 'note' + (q > 1 ? ' neg' : '') }, 'Questa settimana (dal ' + spBrev(ini) + '): spesi ' + L.eur(spSett) + ' su ' + L.eur(bud) + (q > 1 ? ' — sei oltre.' : '.')),
-        h('div', { class: 'kv' }, [['Ricorrenti da coprire', L.eur(riserva)], ['Risparmio', L.eur(risp)], ['Entrate', L.eur(ent) + (stim ? ' (stima)' : '')], ['Già speso', L.eur(t.uscite)], ['Ancora da spendere', L.eur(resto)], ['Giorni al 22', String(giorni)]].map(([l, v]) => h('div', {}, h('small', {}, l), v))));
+        h('div', { class: 'kv' }, [['Ricorrenti da coprire', L.eur(riserva)], ['Contanti ancora da spendere', L.eur(cashRes)], ['Risparmio', L.eur(risp)], ['Entrate', L.eur(ent) + (stim ? ' (stima)' : '')], ['Già speso', L.eur(t.uscite)], ['Ancora da spendere', L.eur(resto)], ['Giorni al 22', String(giorni)]].map(([l, v]) => h('div', {}, h('small', {}, l), v))));
     };
+    const cb = h('input', { type: 'number', step: '10', min: '0', inputmode: 'decimal', placeholder: '0', value: db.settings.contantiMese == null ? 500 : db.settings.contantiMese });
+    cb.addEventListener('change', () => { db.settings.contantiMese = +String(cb.value).replace(',', '.') || 0; save(); route(); });
     acc.addEventListener('input', () => { db.settings.accantonare = +String(acc.value).replace(',', '.') || 0; save(); drawWeek(); });
-    wk.append(h('h3', {}, isCur ? 'Quanto puoi spendere alla settimana' : 'Quanto hai speso in media a settimana'), wOut, isCur && h('div', { class: 'fld' }, h('label', {}, 'Risparmio da mettere da parte nel periodo €'), acc));
+    wk.append(h('h3', {}, isCur ? 'Quanto puoi spendere alla settimana' : 'Quanto hai speso in media a settimana'), wOut, isCur && h('div', { class: 'fld' }, h('label', {}, 'Risparmio da mettere da parte nel periodo €'), acc), isCur && h('div', { class: 'fld' }, h('label', {}, 'Budget contanti del mese € (prelievo fisso, 0 = non usarlo)'), cb));
     drawWeek(); body.append(wk);
     if (isCur) body.append(spPrevCard(key, T));
     // ricorrenti

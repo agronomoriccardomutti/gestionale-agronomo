@@ -281,7 +281,7 @@
     ispezioni: {
       label: 'Tutte le ispezioni', one: 'ispezione', order: { k: 'data', dir: -1 },
       fields: [
-        { k: 'data', l: 'Data ispezione', t: 'date', req: 1, def: 'today' },
+        { k: 'data', l: 'Data ispezione', t: 'date', hint: 'Lasciala vuota finché non è fissata: l’ispezione resta “da fissare” entro la fine del periodo.' },
         { k: 'ora', l: 'Ora', t: 'time' },
         { k: 'azienda', l: 'Azienda', t: 'ref', to: 'aziende' },
         { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Annuale', 'Supplementare', 'A sorpresa', 'Controllo documentale'] },
@@ -308,7 +308,7 @@
         const az = r.azienda ? lab('aziende', r.azienda) : '';
         const comune = r.azienda ? ((rows('aziende').find((x) => x.id === r.azienda) || {}).comune || '') : '';
         const out = [];
-        if (r.stato === 'Programmata' && r.data) out.push({ date: r.data, time: r.ora, durationMin: 180, title: 'Ispezione ' + az, location: comune, description: [r.tipo, r.norma].filter(Boolean).join(' – ') });
+        if (r.stato === 'Programmata' && r.data && !daFissare(r)) out.push({ date: r.data, time: r.ora, durationMin: 180, title: 'Ispezione ' + az, location: comune, description: [r.tipo, r.norma].filter(Boolean).join(' – ') });
         if (r.stato !== 'Chiusa' && r.scadVerbale) out.push({ date: r.scadVerbale, title: 'Consegna verbale ' + az });
         return out;
       },
@@ -712,6 +712,7 @@
   function openForm(ek, rec, preset) {
     const ent = ENT[ek]; const isNew = !rec;
     const r = rec ? Object.assign({}, rec) : Object.assign({ id: uid() }, preset);
+    if (ek === 'ispezioni' && rec && daFissare(rec)) r.data = ''; // 31/12 = solo termine del periodo, non una data fissata
     if (isNew) for (const f of ent.fields) if (r[f.k] == null && f.def != null) r[f.k] = f.def === 'today' ? L.today() : f.def;
     const dlg = document.getElementById('dlg'); dlg.replaceChildren();
     const inputs = {};
@@ -2155,7 +2156,8 @@
   }
 
   // ispezione Programmata con data = fine periodo: è solo il termine del periodo ispettivo, la data va ancora fissata
-  const daFissare = (i) => i.stato === 'Programmata' && !!i.periodo && (() => { const p = byId('periodi', i.periodo); return !!p && !!p.chiusura && i.data === p.chiusura; })();
+  const daFissare = (i) => i.stato === 'Programmata' && (!i.data || (!!i.periodo && (() => { const p = byId('periodi', i.periodo); return !!p && !!p.chiusura && i.data === p.chiusura; })()));
+  const entroTxt = (i) => { const p = i.periodo && byId('periodi', i.periodo); return p && p.chiusura ? 'entro ' + L.fmtDate(p.chiusura) : ''; };
   const periodoPerData = (d) => { const ps = rows('periodi').filter((p) => p.avvio && p.chiusura); return (ps.find((p) => d && d >= p.avvio && d <= p.chiusura) || {}).id || ''; };
   async function scaricaNota(rr) {
     try {
@@ -2262,7 +2264,7 @@
     const isp = rows('ispezioni').filter((i) => i.azienda === id);
     const appunti = rows('promemoria').filter((p) => p.azienda === id);
     const att = rows('attivita').filter((x) => x.azienda === id);
-    const next = isp.filter((i) => i.data && i.data >= T && i.stato !== 'Svolta').sort((x, y) => x.data.localeCompare(y.data))[0];
+    const next = isp.filter((i) => (i.data && i.data >= T || daFissare(i)) && i.stato !== 'Svolta').sort((x, y) => x.data.localeCompare(y.data))[0];
     const open = appunti.filter((p) => p.stato !== 'Fatto').sort((x, y) => (x.data || '9').localeCompare(y.data || '9'));
     const lastDone = isp.filter((i) => i.stato === 'Svolta' || (i.data && i.data < T)).sort((x, y) => (y.data || '').localeCompare(x.data || ''))[0];
     const lastContact = att.filter((x) => x.tipo !== 'Nota').sort((x, y) => (y.data || '').localeCompare(x.data || ''))[0];
@@ -2274,13 +2276,13 @@
     const dati = [line('🆔', 'Codice operatore', a.codice), line('💶', 'Importo ispezione', a.importo !== undefined && a.importo !== '' ? L.eur(+a.importo) : ''), line('📍', 'Ubicazione', place), line('🧑‍🔧', 'Tecnico', a.tecnico)].filter(Boolean);
     const card = (title, content, action) => h('section', { class: 'az-side' }, h('div', { class: 'az-h' }, h('h3', {}, title), action || null), content);
     // prossima azione
-    const nx = open[0] ? { ico: '🔔', t: open[0].titolo, d: open[0].data, go: () => openForm('promemoria', open[0]) } : next ? { ico: '📋', t: 'Ispezione' + (next.destinazione ? ' – ' + next.destinazione : ''), d: daFissare(next) ? '' : next.data, w: daFissare(next) ? 'da fissare · entro ' + L.fmtDate(next.data) : '', go: () => openForm('ispezioni', next) } : null;
+    const nx = open[0] ? { ico: '🔔', t: open[0].titolo, d: open[0].data, go: () => openForm('promemoria', open[0]) } : next ? { ico: '📋', t: 'Ispezione' + (next.destinazione ? ' – ' + next.destinazione : ''), d: daFissare(next) ? '' : next.data, w: daFissare(next) ? ['da fissare', entroTxt(next)].filter(Boolean).join(' · ') : '', go: () => openForm('ispezioni', next) } : null;
     const banner = nx ? h('div', { class: 'az-next', tabindex: '0', onclick: nx.go }, h('span', { class: 'az-i' }, nx.ico), h('div', {}, h('small', {}, 'Prossima azione'), h('b', {}, nx.t)), h('span', { class: 'az-when' + (nx.d && nx.d < T ? ' late' : '') }, nx.d ? L.fmtDate(nx.d) : (nx.w || 'senza data'))) : null;
     // timeline unificata
     const ICO = { Contattata: '✅', 'Ispezione fissata': '📅', Chiamata: '📞', Email: '✉️', Messaggio: '💬', Visita: '🚗', Nota: '📝' };
     const items = [];
     for (const x of att) items.push({ k: 'c', d: x.data, ico: ICO[x.tipo] || '📝', t: x.tipo, x: x.testo, go: () => openForm('attivita', x) });
-    for (const i of isp) items.push({ k: 'i', d: daFissare(i) ? '' : i.data, w: daFissare(i) ? 'da fissare · entro ' + L.fmtDate(i.data) : '', ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: [i.dataCarico ? 'Carico ' + L.fmtDate(i.dataCarico) : '', i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '), st: i.stato, go: () => openForm('ispezioni', i) });
+    for (const i of isp) items.push({ k: 'i', d: daFissare(i) ? '' : i.data, w: daFissare(i) ? ['da fissare', entroTxt(i)].filter(Boolean).join(' · ') : '', ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: [i.dataCarico ? 'Carico ' + L.fmtDate(i.dataCarico) : '', i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '), st: i.stato, go: () => openForm('ispezioni', i) });
     for (const p of appunti) items.push({ k: 'a', d: p.data, ico: p.stato === 'Fatto' ? '✅' : '🔔', t: p.titolo, x: (p.note || '').split('\n').slice(1).join(' · '), st: p.stato === 'Fatto' ? 'Fatto' : 'Aperto', go: () => openForm('promemoria', p) });
     items.sort((x, y) => (y.d || '9999').localeCompare(x.d || '9999'));
     const flt = ui.azf || '';
@@ -2306,7 +2308,7 @@
         const imp = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: importoOf(x), onchange: (e) => { const v = e.target.value.replace(',', '.'); if (v === '') delete x.compenso; else x.compenso = Number(v); touch(); } });
         const c0 = ispCalc(x); out.rimb.textContent = eurTxt(c0.rimb); out.somma.textContent = eurTxt(c0.somma); out.tot.textContent = eurTxt(c0.tot); out.tot2.textContent = eurTxt(c0.tot); cs.push(x);
         const aperta = ispAll.length === 1 || x.stato === 'Programmata' || (x.data || '') >= T;
-        return h('details', { class: 'ns', open: aperta ? '' : null }, h('summary', { class: 'ns-h' }, h('b', {}, daFissare(x) ? 'Data da fissare' : x.data ? L.fmtDate(x.data) : 'senza data'), daFissare(x) && h('span', { class: 'note' }, 'entro ' + L.fmtDate(x.data)), tag(x.stato, CL[x.stato]), h('span', { class: 'ns-sum1' }, out.tot2), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, 'periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica')),
+        return h('details', { class: 'ns', open: aperta ? '' : null }, h('summary', { class: 'ns-h' }, h('b', {}, daFissare(x) ? 'Data da fissare' : x.data ? L.fmtDate(x.data) : 'senza data'), daFissare(x) && h('span', { class: 'note' }, entroTxt(x)), tag(x.stato, CL[x.stato]), h('span', { class: 'ns-sum1' }, out.tot2), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, 'periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica')),
           h('div', { class: 'ns-g' }, txt('partenza', 'Partenza', db.settings.partenza || ''), txt('destinazione', 'Destinazione', a.comune || ''), num('km', 'Km percorsi', '1'), num('kmExtra', 'Km extra', '1'), num('altreSpese', 'Autostrada / altre spese €', '0.01'),
             h('label', { class: 'nf' }, h('small', {}, 'Complessità'), comp), h('label', { class: 'nf' }, h('small', {}, 'Importo ispezione €'), imp), h('label', { class: 'nf w2' }, h('small', {}, 'Periodo ispettivo (la nota spese confluisce qui)'), per)),
           h('div', { class: 'ns-t' }, h('span', {}, 'Rimborso km ', out.rimb), h('span', {}, 'Somma rimborso ', out.somma), h('span', {}, 'Totale ', out.tot)));

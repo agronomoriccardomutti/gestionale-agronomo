@@ -6,7 +6,7 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'studenti', 'valutazioni', 'verbali', 'movimenti', 'ricorrenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
@@ -524,6 +524,26 @@
       title: (r) => (r.tipo === 'Dipartimento Scienze Agrarie' ? 'Dipartimento Sc. Agrarie' : 'CdC ' + (lab('classi', r.classe) || '')) + ' – verbale n. ' + (r.numero || '?'),
       cols: ['tipo', 'data'], detail: (r) => '#/scuola/verbale/' + r.id,
     },
+    figlie: {
+      label: 'Figlie', one: 'figlia', order: { k: 'nome', dir: 1 },
+      fields: [
+        { k: 'nome', l: 'Nome', t: 'text', req: 1 },
+        { k: 'nascita', l: 'Data di nascita', t: 'date' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => r.nome || 'Figlia', cols: ['nascita'],
+      onDelete: (r) => { for (const d of rows('diario')) if (d.figlia === r.id) { d.figlia = ''; d.updated = NOW(); } },
+    },
+    diario: {
+      label: 'Diario', one: 'annotazione', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data', t: 'date', def: 'today', req: 1 },
+        { k: 'figlia', l: 'Figlia', t: 'ref', to: 'figlie', hint: 'Vuoto = riguarda tutte.' },
+        { k: 'categoria', l: 'Categoria', t: 'text', list: ['Salute', 'Scuola', 'Crescita', 'Sport e attività', 'Momenti', 'Documenti', 'Spese', 'Altro'], learn: 1 },
+        { k: 'titolo', l: 'Titolo', t: 'text' },
+        { k: 'testo', l: 'Annotazione', t: 'textarea' }],
+      dlg: { name: () => 'annotazione', wide: true, focus: 'testo', rows: [['data', 'figlia'], ['categoria', 'titolo']], sections: { data: 'Quando e chi', testo: 'Cosa è successo' } },
+      title: (r) => r.titolo || r.categoria || 'Annotazione', cols: ['data', 'figlia', 'categoria'],
+    },
     riunioni: {
       label: 'Dipartimento', one: 'riunione di dipartimento', order: { k: 'data', dir: -1 },
       fields: [
@@ -620,6 +640,7 @@
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture', 'versamenti'] },
     { id: 'scuola', label: 'Scuola', icon: '🎓', ents: ['impegni', 'classi', 'appunti', 'riunioni', 'verifiche', 'verbali', 'docenti', 'cattedre'] },
+    { id: 'figlie', label: 'Figlie', icon: '👧', ents: ['diario', 'figlie'] },
     { id: 'spese', label: 'Spese', icon: '💶', ents: ['movimenti', 'ricorrenti'] },
     { id: 'promemoria', label: 'Promemoria', icon: '🔔', ents: ['promemoria'] },
     { id: 'impostazioni', label: 'Impostazioni', icon: '⚙️' },
@@ -1097,7 +1118,7 @@
 
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : ek === 'riunioni' ? viewDipartimento() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : ek === 'riunioni' ? viewDipartimento() : ek === 'diario' ? viewDiario() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
@@ -1977,6 +1998,34 @@
   const META_K = 'gestionale-appunti-meta'; // data e nota delle pagine pubblicate (stessa chiave usata dentro le pagine)
   const metaLoad = () => { try { return JSON.parse(localStorage.getItem(META_K)) || {}; } catch (e) { return {}; } };
   const pageKey = (link) => (link || '').split('/').pop().replace(/\.html$/, '');
+  function viewDiario() {
+    const all = rows('diario').slice().sort((a, b) => (b.data || '').localeCompare(a.data || '') || (b.updated || '').localeCompare(a.updated || ''));
+    const fig = rows('figlie').slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'it'));
+    const nz = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const cats = [...new Set(all.map((r) => (r.categoria || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'it'));
+    const list = h('div', {});
+    const draw = () => {
+      const fl = ui.dgf || '', ct = ui.dgc || '', q = nz(ui.dgq);
+      const sh = all.filter((r) => (!fl || (fl === '_t' ? !r.figlia : r.figlia === fl)) && (!ct || (r.categoria || '') === ct) && (!q || nz([r.titolo, r.testo, r.categoria].join(' ')).includes(q)));
+      const mesi = new Map();
+      for (const r of sh) { const k = (r.data || '').slice(0, 7) || 'senza data'; if (!mesi.has(k)) mesi.set(k, []); mesi.get(k).push(r); }
+      const nomeMese = (k) => /^\d{4}-\d\d$/.test(k) ? new Date(k + '-15').toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }) : k;
+      const i = [...mesi.keys()];
+      list.replaceChildren(...(sh.length ? i.map((k, n) => h('details', { class: 'inc-c', open: n < 2 ? '' : null }, h('summary', {}, h('b', {}, nomeMese(k)), h('span', { class: 'note' }, ' · ' + mesi.get(k).length)),
+        h('div', { class: 'inc-l' }, mesi.get(k).map((r) => h('div', { class: 'row', tabindex: '0', onclick: () => openForm('diario', r), onkeydown: (e) => { if (e.key === 'Enter') openForm('diario', r); } },
+          h('span', { class: 't' }, (r.titolo || r.categoria || 'Annotazione'), h('div', { class: 'note' }, [r.data ? L.fmtDate(r.data) : '', r.categoria && r.titolo ? r.categoria : ''].filter(Boolean).join(' · ')),
+            r.testo ? h('div', { class: 'note' }, r.testo.length > 160 ? r.testo.slice(0, 160) + '…' : r.testo) : null),
+          h('span', { class: 'tag' }, r.figlia ? lab('figlie', r.figlia) : 'Tutte')))))) : [h('div', { class: 'empty' }, all.length ? 'Nessuna annotazione con questi filtri.' : 'Il diario è vuoto: tocca “+ Nuova annotazione”.')]));
+    };
+    const chip = (k, cur, set, l) => h('a', { class: 'chip' + (cur === k ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); set(k); route(); } }, l);
+    const search = h('input', { type: 'search', class: 'az-q', placeholder: 'Cerca nel diario…', value: ui.dgq || '', oninput: (e) => { ui.dgq = e.target.value; draw(); } });
+    const root = h('div', {}, h('div', { class: 'bar' }, btn('+ Nuova annotazione', () => openForm('diario', null, { figlia: fig.some((f) => f.id === ui.dgf) ? ui.dgf : undefined }), 'pri'), !fig.length ? btn('+ Aggiungi figlia', () => openForm('figlie', null), '') : null),
+      fig.length ? h('div', { class: 'chips' }, chip('', ui.dgf || '', (v) => { ui.dgf = v; }, 'Tutte'), fig.map((f) => chip(f.id, ui.dgf || '', (v) => { ui.dgf = v; }, f.nome)), chip('_t', ui.dgf || '', (v) => { ui.dgf = v; }, 'Per tutte')) : h('p', { class: 'note' }, 'Aggiungi prima le figlie (scheda “Figlie”) per segnare a chi si riferisce ogni annotazione.'),
+      cats.length ? h('div', { class: 'chips' }, chip('', ui.dgc || '', (v) => { ui.dgc = v; }, 'Ogni categoria'), cats.map((c) => chip(c, ui.dgc || '', (v) => { ui.dgc = v; }, c))) : null,
+      search, list, h('p', { class: 'note' }, '🔒 Il diario resta solo su questo dispositivo: non viene sincronizzato.'));
+    draw(); return root;
+  }
+
   function viewAppunti() {
     if (!APPUNTI_SITO.list && !APPUNTI_SITO.busy) {
       APPUNTI_SITO.busy = true;

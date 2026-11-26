@@ -2541,7 +2541,21 @@
     document.getElementById('nav').replaceChildren(...MODS.map((m) => h('a', { href: '#/' + m.id, class: m.id === cur ? 'on' : '' }, h('span', { class: 'i' }, m.icon), m.label)));
   }
   let lastMod = '';
+  // collegamento automatico: #/scuola/appunti/nuovo?titolo=…&link=…&classe=3ª A&materia=…&argomento=…&tipo=…
+  function importaAppunto() {
+    const m = /^#\/scuola\/appunti\/nuovo\?(.*)$/.exec(location.hash || ''); if (!m) return;
+    const q = new URLSearchParams(m[1]), g = (k) => (q.get(k) || '').trim().slice(0, 300);
+    history.replaceState(null, '', '#/scuola/appunti');
+    const link = g('link'); if (!/^https:\/\//i.test(link)) { toast('Link non valido: manca l’indirizzo https'); return; }
+    const cn = g('classe'), cl = cn && rows('classi').find((c) => normCl(c.nome) === normCl(cn));
+    let r = rows('appunti').find((x) => x.link === link); const nuovo = !r;
+    if (!r) { r = { id: uid(), data: L.today() }; rows('appunti').push(r); }
+    Object.assign(r, { link, titolo: g('titolo') || r.titolo || '', argomento: g('argomento') || r.argomento || '', materia: g('materia') || r.materia || '', tipo: g('tipo') || r.tipo || 'Appunti', updated: NOW() });
+    if (cl) r.classe = cl.id;
+    save(); toast(nuovo ? 'Appunti aggiunti: ' + (r.titolo || 'nuova pagina') : 'Appunti aggiornati');
+  }
   function route() {
+    try { importaAppunto(); } catch (e) { /* non blocca la vista */ }
     try { normTipi(); } catch (e) { /* non blocca la vista */ }
     const [, id = 'oggi', ek, arg] = (location.hash || '#/oggi').split('/');
     const mod = MODS.find((m) => m.id === id) || MODS[0];

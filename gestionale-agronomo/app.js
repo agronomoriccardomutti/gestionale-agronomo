@@ -2455,8 +2455,7 @@
       if (manual) { toast('Calendario aggiornato'); route(); }
     } catch (e) {
       const m = /bucket|not found|policy|row-level|403|404/i.test(e.message) ? 'manca la configurazione su Supabase (script calendario.sql)' : e.message;
-      db.meta.feedAt = ''; if (manual) toast('Calendario non aggiornato: ' + m); setStatus('☁️ ⚠️', 'Calendario: ' + m);
-    }
+      db.meta.feedAt = ''; db.meta.feedErr = m; if (manual) toast('Calendario non aggiornato: ' + m); }
   }
   function calendarSection() {
     const box = h('div', {}, h('h3', {}, 'Calendario Apple (automatico)'));
@@ -2565,11 +2564,11 @@
     if (navigator.onLine === false) { setStatus('☁️ offline', 'Nessuna rete: sincronizzo appena torna'); return; }
     syncing = true; setStatus('⏳', 'Sincronizzazione in corso…');
     try {
-      let since = db.meta.lastPull, max = since, changed = false; const pulled = {};
+      let since = db.meta.lastPull, max = since, changed = false, nRecv = 0; const pulled = {};
       for (;;) { // 1) scarica le novità (le modifiche più recenti vincono)
         const q = '/rest/v1/records?select=id,entity,data,updated,deleted,synced_at&order=synced_at.asc&limit=1000' + (since ? '&synced_at=gte.' + encodeURIComponent(since) : '');
         const batch = await api('GET', q);
-        for (const r of batch) { if (applyRemote(r, pulled)) changed = true; if (!max || ts(r.synced_at) > ts(max)) max = r.synced_at; }
+        for (const r of batch) { if (applyRemote(r, pulled)) { changed = true; nRecv++; } if (!max || ts(r.synced_at) > ts(max)) max = r.synced_at; }
         if (batch.length < 1000 || max === since) break;
         since = max;
       }
@@ -2581,8 +2580,10 @@
       for (let i = 0; i < out.length; i += 200) await api('POST', '/rest/v1/records?on_conflict=id', out.slice(i, i + 200), { Prefer: 'resolution=merge-duplicates,return=minimal' });
       db.meta.deleted = db.meta.deleted.filter((d) => !tombs.includes(d));
       db.meta.lastPush = t0; db.meta.lastSync = new Date().toISOString();
-      setStatus('☁️ ✓', 'Sincronizzato alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
-      publishFeed(false);
+      db.meta.feedErr = '';
+      await publishFeed(false);
+      setStatus('☁️ ✓', 'Sincronizzato alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) + (db.meta.feedErr ? ' · Calendario non attivo: ' + db.meta.feedErr : ''));
+      if (manual) toast('Sincronizzato: ' + out.filter((x) => !x.deleted).length + ' inviati, ' + nRecv + ' ricevuti' + (db.meta.feedErr ? ' (calendario non attivo)' : ''));
       if (changed) route();
     } catch (e) {
       if (getSession()) setStatus('☁️ ⚠️', 'Sincronizzazione non riuscita: ' + e.message);

@@ -2154,6 +2154,8 @@
     dlg.showModal();
   }
 
+  // ispezione Programmata con data = fine periodo: è solo il termine del periodo ispettivo, la data va ancora fissata
+  const daFissare = (i) => i.stato === 'Programmata' && !!i.periodo && (() => { const p = byId('periodi', i.periodo); return !!p && !!p.chiusura && i.data === p.chiusura; })();
   const periodoPerData = (d) => { const ps = rows('periodi').filter((p) => p.avvio && p.chiusura); return (ps.find((p) => d && d >= p.avvio && d <= p.chiusura) || {}).id || ''; };
   async function scaricaNota(rr) {
     try {
@@ -2272,20 +2274,20 @@
     const dati = [line('🆔', 'Codice operatore', a.codice), line('💶', 'Importo ispezione', a.importo !== undefined && a.importo !== '' ? L.eur(+a.importo) : ''), line('📍', 'Ubicazione', place), line('🧑‍🔧', 'Tecnico', a.tecnico)].filter(Boolean);
     const card = (title, content, action) => h('section', { class: 'az-side' }, h('div', { class: 'az-h' }, h('h3', {}, title), action || null), content);
     // prossima azione
-    const nx = open[0] ? { ico: '🔔', t: open[0].titolo, d: open[0].data, go: () => openForm('promemoria', open[0]) } : next ? { ico: '📋', t: 'Ispezione' + (next.destinazione ? ' – ' + next.destinazione : ''), d: next.data, go: () => openForm('ispezioni', next) } : null;
-    const banner = nx ? h('div', { class: 'az-next', tabindex: '0', onclick: nx.go }, h('span', { class: 'az-i' }, nx.ico), h('div', {}, h('small', {}, 'Prossima azione'), h('b', {}, nx.t)), h('span', { class: 'az-when' + (nx.d && nx.d < T ? ' late' : '') }, nx.d ? L.fmtDate(nx.d) : 'senza data')) : null;
+    const nx = open[0] ? { ico: '🔔', t: open[0].titolo, d: open[0].data, go: () => openForm('promemoria', open[0]) } : next ? { ico: '📋', t: 'Ispezione' + (next.destinazione ? ' – ' + next.destinazione : ''), d: daFissare(next) ? '' : next.data, w: daFissare(next) ? 'da fissare · entro ' + L.fmtDate(next.data) : '', go: () => openForm('ispezioni', next) } : null;
+    const banner = nx ? h('div', { class: 'az-next', tabindex: '0', onclick: nx.go }, h('span', { class: 'az-i' }, nx.ico), h('div', {}, h('small', {}, 'Prossima azione'), h('b', {}, nx.t)), h('span', { class: 'az-when' + (nx.d && nx.d < T ? ' late' : '') }, nx.d ? L.fmtDate(nx.d) : (nx.w || 'senza data'))) : null;
     // timeline unificata
     const ICO = { Contattata: '✅', 'Ispezione fissata': '📅', Chiamata: '📞', Email: '✉️', Messaggio: '💬', Visita: '🚗', Nota: '📝' };
     const items = [];
     for (const x of att) items.push({ k: 'c', d: x.data, ico: ICO[x.tipo] || '📝', t: x.tipo, x: x.testo, go: () => openForm('attivita', x) });
-    for (const i of isp) items.push({ k: 'i', d: i.data, ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: [i.dataCarico ? 'Carico ' + L.fmtDate(i.dataCarico) : '', i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '), st: i.stato, go: () => openForm('ispezioni', i) });
+    for (const i of isp) items.push({ k: 'i', d: daFissare(i) ? '' : i.data, w: daFissare(i) ? 'da fissare · entro ' + L.fmtDate(i.data) : '', ico: '📋', t: 'Ispezione' + ([i.partenza, i.destinazione].filter(Boolean).length ? ' · ' + [i.partenza, i.destinazione].filter(Boolean).join(' → ') : ''), x: [i.dataCarico ? 'Carico ' + L.fmtDate(i.dataCarico) : '', i.periodo ? lab('periodi', i.periodo) : ''].filter(Boolean).join(' · '), st: i.stato, go: () => openForm('ispezioni', i) });
     for (const p of appunti) items.push({ k: 'a', d: p.data, ico: p.stato === 'Fatto' ? '✅' : '🔔', t: p.titolo, x: (p.note || '').split('\n').slice(1).join(' · '), st: p.stato === 'Fatto' ? 'Fatto' : 'Aperto', go: () => openForm('promemoria', p) });
     items.sort((x, y) => (y.d || '9999').localeCompare(x.d || '9999'));
     const flt = ui.azf || '';
     const FL = [['', 'Tutto'], ['c', 'Contatti'], ['i', 'Ispezioni'], ['a', 'Appunti']];
     const shown = items.filter((x) => !flt || x.k === flt);
     const mkTl = (arr) => arr.length ? h('div', { class: 'tl' }, arr.map((x) => h('div', { class: 'tl-i' + (x.d && x.d > T ? ' fut' : ''), tabindex: '0', onclick: x.go },
-      h('span', { class: 'tl-dot' }, x.ico), h('div', { class: 'tl-b' }, h('div', { class: 'tl-t' }, h('b', {}, x.t), x.st && tag(x.st, CL[x.st] || (x.st === 'Aperto' ? 'warn' : ''))), h('small', {}, (x.d ? L.fmtDate(x.d) : 'senza data') + (x.x ? ' · ' : ''), x.x || ''))))) : h('p', { class: 'note' }, 'Nessuna attività registrata.');
+      h('span', { class: 'tl-dot' }, x.ico), h('div', { class: 'tl-b' }, h('div', { class: 'tl-t' }, h('b', {}, x.t), x.st && tag(x.st, CL[x.st] || (x.st === 'Aperto' ? 'warn' : ''))), h('small', {}, (x.d ? L.fmtDate(x.d) : (x.w || 'senza data')) + (x.x ? ' · ' : ''), x.x || ''))))) : h('p', { class: 'note' }, 'Nessuna attività registrata.');
     const tl = mkTl(shown);
     // nota spese per ispezione
     const ispAll = isp.slice().sort((x, y) => (y.data || '').localeCompare(x.data || ''));
@@ -2304,7 +2306,7 @@
         const imp = h('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0', value: importoOf(x), onchange: (e) => { const v = e.target.value.replace(',', '.'); if (v === '') delete x.compenso; else x.compenso = Number(v); touch(); } });
         const c0 = ispCalc(x); out.rimb.textContent = eurTxt(c0.rimb); out.somma.textContent = eurTxt(c0.somma); out.tot.textContent = eurTxt(c0.tot); out.tot2.textContent = eurTxt(c0.tot); cs.push(x);
         const aperta = ispAll.length === 1 || x.stato === 'Programmata' || (x.data || '') >= T;
-        return h('details', { class: 'ns', open: aperta ? '' : null }, h('summary', { class: 'ns-h' }, h('b', {}, x.data ? L.fmtDate(x.data) : 'senza data'), tag(x.stato, CL[x.stato]), h('span', { class: 'ns-sum1' }, out.tot2), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, 'periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica')),
+        return h('details', { class: 'ns', open: aperta ? '' : null }, h('summary', { class: 'ns-h' }, h('b', {}, daFissare(x) ? 'Data da fissare' : x.data ? L.fmtDate(x.data) : 'senza data'), daFissare(x) && h('span', { class: 'note' }, 'entro ' + L.fmtDate(x.data)), tag(x.stato, CL[x.stato]), h('span', { class: 'ns-sum1' }, out.tot2), x.periodo && h('a', { href: '#/ispezioni/periodo/' + x.periodo, class: 'note' }, 'periodo'), h('a', { href: '#', class: 'note', onclick: (e) => { e.preventDefault(); openForm('ispezioni', x); } }, 'modifica')),
           h('div', { class: 'ns-g' }, txt('partenza', 'Partenza', db.settings.partenza || ''), txt('destinazione', 'Destinazione', a.comune || ''), num('km', 'Km percorsi', '1'), num('kmExtra', 'Km extra', '1'), num('altreSpese', 'Autostrada / altre spese €', '0.01'),
             h('label', { class: 'nf' }, h('small', {}, 'Complessità'), comp), h('label', { class: 'nf' }, h('small', {}, 'Importo ispezione €'), imp), h('label', { class: 'nf w2' }, h('small', {}, 'Periodo ispettivo (la nota spese confluisce qui)'), per)),
           h('div', { class: 'ns-t' }, h('span', {}, 'Rimborso km ', out.rimb), h('span', {}, 'Somma rimborso ', out.somma), h('span', {}, 'Totale ', out.tot)));

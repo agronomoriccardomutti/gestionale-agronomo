@@ -1884,9 +1884,9 @@
       const tot = h('td', { class: 'tot' }), hyp = h('td', { class: 'hyp' }); refs.set(st.id, { tot, hyp });
       const rec = h('input', { type: 'date', class: 'rec', 'aria-label': 'Data recupero di ' + st.nome, value: val.rec || '',
         onchange: (e) => { const x = ensure(st.id); x.rec = e.target.value; x.updated = NOW(); save(); } });
-      const tagBtn = h('button', { type: 'button', class: 'tagc' + (st.tag ? ' on' : ''), title: 'Tocca per cambiare: nessuno → H → DSA', onclick: () => { st.tag = st.tag === 'H' ? 'DSA' : st.tag === 'DSA' ? '' : 'H'; st.updated = NOW(); save(); route(); } }, st.tag || '+ H/DSA');
+      const tagBtn = h('button', { type: 'button', class: 'tagc' + (st.tag ? ' on' : ''), title: 'Tocca per cambiare: H → DSA → nessuno (si imposta anche in Classi → Studenti)', onclick: () => { st.tag = st.tag === 'H' ? 'DSA' : st.tag === 'DSA' ? '' : 'H'; st.updated = NOW(); save(); route(); } }, st.tag || '+ H/DSA');
       const presBtn = h('button', { type: 'button', class: 'pres' + (ass ? ' abs' : ''), onclick: () => { const x = ensure(st.id); x.assente = !x.assente; x.updated = NOW(); save(); route(); } }, ass ? 'Assente' : 'Presente');
-      const nm = h('td', { class: 'nm' }, h('div', { class: 'nmn' }, st.nome), h('div', { class: 'nmc' }, presBtn, tagBtn, ass && rec));
+      const nm = h('td', { class: 'nm' }, h('div', { class: 'nmn' }, st.nome), h('div', { class: 'nmc' }, presBtn, st.tag && tagBtn, ass && rec));
       const pc = parts.map((p) => {
         const inp = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.25', min: '0', max: String(p.max), 'aria-label': p.name + ' di ' + st.nome });
         if (val.scores && typeof val.scores[p.id] === 'number') inp.value = val.scores[p.id];

@@ -1559,6 +1559,7 @@
       ['Telefono/Internet', /telefon|internet|fibra|\btim\b|vodafone|windtre|iliad|ricarica|\bsim\b/],
       ['Farmacia', /farmaci|parafarmacia|medicin/],
       ['Salute', /dentista|medico|visita|analisi|\bticket\b|oculista|fisioterap|ospedale/],
+      ['Amazon', /amazon|\bamzn\b|prime video/],
       ['Abbigliamento', /vestit|scarpe|giacca|pantaloni|maglia|abbigliament|calze/],
       ['Bar', /\bbar\b|caffe|cappuccino|colazione|aperitivo|spritz|birra/],
       ['Ristoranti/Svago', /ristorante|pizza|trattoria|osteria|\bcena\b|pranzo|cinema|teatro|concerto|gelato|hotel|vacanza|ingresso/],

@@ -6,10 +6,12 @@
   const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID()
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   // Configurazione sincronizzazione (config.js). Le schede in localOnly non lasciano mai il dispositivo.
-  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: ['fatture', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie'] }, window.GESTIONALE_CONFIG);
+  const cfg = Object.assign({ supabaseUrl: '', supabaseKey: '', localOnly: [] }, window.GESTIONALE_CONFIG);
   cfg.supabaseUrl = String(cfg.supabaseUrl || '').replace(/\/+$/, '');
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
+  // dati sensibili: si sincronizzano tra i dispositivi ma non entrano mai nel calendario condiviso (webcal)
+  const FEED_NO = ['fatture', 'ricorrenti', 'movimenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie', 'studenti', 'valutazioni', 'verbali'];
 
   /* ---------- DOM helper (nessun innerHTML: i dati utente sono sempre testo) ---------- */
   function h(tag, attrs, ...kids) {
@@ -663,7 +665,7 @@
     // spese e ricorrenti ora si sincronizzano: una tantum le segno come "da inviare" (altrimenti restano fuori dal primo invio)
     if (!o.meta.spSync) { o.meta.spSync = 1; for (const k of ['movimenti', 'ricorrenti']) for (const r of o.data[k]) r.updated = now; }
     // studenti e valutazioni ora si sincronizzano: al primo invio li mando tutti (senza toccare le date di modifica)
-    if (!o.meta.stuMig) { o.meta.stuMig = 1; o.meta.force = ['studenti', 'valutazioni']; }
+    if (!o.meta.allMig) { o.meta.allMig = 1; o.meta.force = ['studenti', 'valutazioni', 'fatture', 'verbali', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie']; }
     // migrazione: trimestre (testo) -> periodo; stato "Eseguita" -> "Svolta"
     const byTri = {};
     for (const ek of ['piano', 'ispezioni']) for (const r of o.data[ek]) {
@@ -2439,7 +2441,7 @@
   const djb = (t) => { let x = 5381; for (let i = 0; i < t.length; i++) x = ((x << 5) + x + t.charCodeAt(i)) | 0; return String(x); };
   function feedICS() {
     const from = L.addDays(L.today(), -14);
-    const ev = allEvents().filter((e) => !e.done && synced(e.entKey) && e.entKey !== 'ricorrenti' && e.date >= from).sort(cmpEv);
+    const ev = allEvents().filter((e) => !e.done && synced(e.entKey) && !FEED_NO.includes(e.entKey) && e.date >= from).sort(cmpEv);
     return L.buildICS(ev, Object.assign(icsOpts(), { name: 'Gestionale Agronomo' })).replace('METHOD:PUBLISH', 'METHOD:PUBLISH\r\nX-PUBLISHED-TTL:PT1H\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H');
   }
   async function putFeed(text, retried) {

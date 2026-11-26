@@ -86,7 +86,7 @@ MIT — vedi `LICENSE`.
 - **Classi** → pulsante *Studenti e voti*: incolla l'elenco (uno per riga), segna H/DSA, vedi la tabella voti e la media.
 - **Verifiche**: crea una verifica per classe con le parti e i punti massimi e l'intervallo dei voti (default 3–9).
 - **Correggi**: inserisci i punti per parte; voto ipotetico = voto min + punti ÷ totale × (voto max − voto min). Il voto finale facoltativo prevale. Presente/assente con data di recupero, statistiche e *Copia risultati* (TSV).
-- Studenti e valutazioni si sincronizzano (tolti da `localOnly` in `config.js`): rimettili in quell'elenco per tenerli solo sul dispositivo.
+- Tutto si sincronizza (`localOnly` in `config.js` è vuoto): scrivi lì il nome di una scheda per tenerla solo sul dispositivo.
 
 ## Ispezioni: importa il Modello 22 (EcoGruppo)
 

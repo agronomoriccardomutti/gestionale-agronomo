@@ -1887,7 +1887,8 @@
     };
     const updateRow = (st) => {
       const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
-      t.tot.replaceChildren(cv.any ? h('div', { class: 'ptot' }, h('b', {}, fmt1(cv.tot)), h('span', { class: 'pbar' }, h('i', { style: 'width:' + Math.min(100, Math.round(cv.tot / (m || 1) * 100)) + '%' }))) : ''); t.hyp.replaceChildren(votoEl(cv.hyp));
+      t.tot.replaceChildren(cv.any ? h('div', { class: 'ptot' }, h('b', {}, fmt1(cv.tot)), h('span', { class: 'pbar' }, h('i', { style: 'width:' + Math.min(100, Math.round(cv.tot / (m || 1) * 100)) + '%' }))) : ''); t.hyp.replaceChildren(...[votoEl(cv.hyp), (cv.hyp !== null && cv.fin === null && !(valOf(vid, st.id) || {}).assente) ? h('button', { type: 'button', class: 'acc', title: 'Usa ' + fmt1(cv.hyp) + ' come voto finale', onclick: () => { const x = ensure(st.id); x.final = Math.round(cv.hyp * 4) / 4; x.updated = NOW(); save(); route(); } }, '→ finale') : null].filter(Boolean));
+      if (typeof root !== 'undefined' && root._df) setTimeout(root._df, 0);
       const tr = t.tot.parentElement; // in rosso i campi ancora da compilare (punti e voto finale) per chi è presente
       if (tr) tr.querySelectorAll('input.score, select[aria-label^="Voto finale"]').forEach((el) => el.classList.toggle('vuoto', !tr.classList.contains('abs') && el.value === ''));
     };
@@ -1930,14 +1931,26 @@
       showText('Risultati della verifica', lines.join('\n'), 'Copia e incolla nel registro o in un foglio di calcolo.');
     };
     const obsUri = () => 'obsidian://new?vault=' + encodeURIComponent('VaultdiRic') + '&file=' + encodeURIComponent('wiki/scuola/' + obsName(v).replace(/\.md$/, '')) + '&overwrite=true&content=' + encodeURIComponent(buildMd(v));
+    const filtro = h('div', { class: 'chips cor-f' });
     const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('div', { class: 'vhead' }, h('h2', {}, v.titolo || 'Verifica'), h('div', { class: 'vtags' },
-        h('span', { class: 'vt cl' }, (byId('classi', v.classe) || {}).nome || ''), h('span', { class: 'vt' }, matOf(v)), h('span', { class: 'vt' }, perOf(v)), h('span', { class: 'vt' }, '📅 ' + L.fmtDate(v.data)), h('span', { class: 'vt' }, L.num(m) + ' punti')),
+        h('span', { class: 'vt' }, matOf(v)), h('span', { class: 'vt' }, perOf(v)), h('span', { class: 'vt' }, '📅 ' + L.fmtDate(v.data)), h('span', { class: 'vt' }, L.num(m) + ' punti')),
         h('p', { class: 'note' }, 'Voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.')),
-      h('div', { class: 'bar' }, btn('Copia risultati', copy, 'pri'), btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), ''),
-        h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe')), statsBox);
+      h('div', { class: 'bar' }, btn('Copia risultati', copy, 'pri'), h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe'),
+        h('details', { class: 'more' }, h('summary', { class: 'btn' }, '⋯ Altro'), h('div', { class: 'more-l' }, btn('Modifica struttura', () => openForm('verifiche', v), ''), btn('📝 Scrivi su Obsidian', () => { location.href = obsUri(); }, ''), btn('⬇️ Nota .md', () => deliver(buildMd(v), obsName(v), 'text/markdown'), '')))), statsBox, filtro);
+
     if (!studs.length) { root.append(h('div', { class: 'empty' }, 'Questa classe non ha ancora studenti: aggiungili da “Studenti della classe”.')); return root; }
     root.append(h('div', { class: 'scroll cor-w' }, h('table', { class: 'g cor' }, h('thead', {}, head), h('tbody', {}, body))));
-    studs.forEach(updateRow); renderStats();
+    const tab = root.querySelector('table.cor');
+    const incompleto = (st) => { const val = valOf(vid, st.id) || {}; if (val.assente) return false; const sc = val.scores || {}; return parts.some((p) => typeof sc[p.id] !== 'number') || typeof val.final !== 'number'; };
+    const drawFiltro = () => {
+      const n = studs.filter(incompleto).length, solo = !!ui.corSolo && n > 0;
+      tab.classList.toggle('solo', solo); [...tab.tBodies[0].rows].forEach((tr, i) => { tr.hidden = solo && !incompleto(studs[i]); });
+      filtro.replaceChildren(...[h('a', { class: 'chip' + (!solo ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.corSolo = false; drawFiltro(); } }, 'Tutti (' + studs.length + ')'),
+        h('a', { class: 'chip' + (solo ? ' on' : ''), href: '#', onclick: (e) => { e.preventDefault(); ui.corSolo = true; drawFiltro(); } }, 'Da completare (' + n + ')'),
+        n === 0 && studs.length ? h('span', { class: 'note' }, '✔ Tutto compilato') : null].filter(Boolean));
+    };
+    root._df = drawFiltro;
+    studs.forEach(updateRow); renderStats(); drawFiltro();
     return root;
   }
 

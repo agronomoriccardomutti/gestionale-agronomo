@@ -421,3 +421,12 @@ details.ns{padding:0}.ns>summary{list-style:none;cursor:pointer;padding:12px 14p
 /* correzione: campi non ancora compilati */
 table.cor input.score.vuoto,table.cor select.vuoto{border:1.5px solid #d64545;background:#fdecec}
 @media (prefers-color-scheme:dark){table.cor input.score.vuoto,table.cor select.vuoto{border-color:#e06666;background:#3a1f1f}}
+
+/* correzione: azioni secondarie, filtro, accetta voto */
+details.more{position:relative;display:inline-block}details.more>summary{list-style:none;cursor:pointer}details.more>summary::-webkit-details-marker{display:none}
+.more-l{position:absolute;z-index:5;margin-top:6px;min-width:210px;display:flex;flex-direction:column;gap:6px;padding:10px;background:var(--card,#fff);border:1px solid var(--bd);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.more-l .btn,.more-l button{width:100%;text-align:left}
+.cor-f{margin:12px 0 8px;align-items:center}
+button.acc{display:block;margin:4px auto 0;padding:1px 8px;font-size:11px;border-radius:999px;border:1px dashed var(--bd);background:transparent;color:var(--mut);cursor:pointer}
+button.acc:hover{color:var(--pri);border-color:var(--pri)}
+table.cor tr[hidden]{display:none}

@@ -1901,7 +1901,8 @@
         onchange: (e) => { const x = ensure(st.id); x.rec = e.target.value; x.updated = NOW(); save(); } });
       const tagBtn = h('button', { type: 'button', class: 'tagc' + (st.tag ? ' on' : ''), title: 'Tocca per cambiare: H → DSA → nessuno (si imposta anche in Classi → Studenti)', onclick: () => { st.tag = st.tag === 'H' ? 'DSA' : st.tag === 'DSA' ? '' : 'H'; st.updated = NOW(); save(); route(); } }, st.tag || '+ H/DSA');
       const presBtn = h('button', { type: 'button', class: 'pres' + (ass ? ' abs' : ''), onclick: () => { const x = ensure(st.id); x.assente = !x.assente; x.updated = NOW(); save(); route(); } }, ass ? 'Assente' : 'Presente');
-      const nm = h('td', { class: 'nm' }, h('div', { class: 'nmn' }, st.nome), h('div', { class: 'nmc' }, presBtn, st.tag && tagBtn, ass && rec));
+      const ini = String(st.nome || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+      const nm = h('td', { class: 'nm' }, h('span', { class: 'av' + (ass ? ' abs' : '') }, ini), h('div', { class: 'nmw' }, h('div', { class: 'nmn' }, st.nome), h('div', { class: 'nmc' }, presBtn, st.tag && tagBtn, ass && rec)));
       const pc = parts.map((p) => {
         const inp = h('input', { class: 'score', type: 'number', inputmode: 'decimal', step: '0.25', min: '0', max: String(p.max), 'aria-label': p.name + ' di ' + st.nome });
         if (val.scores && typeof val.scores[p.id] === 'number') inp.value = val.scores[p.id];
@@ -1932,7 +1933,7 @@
     };
     const obsUri = () => 'obsidian://new?vault=' + encodeURIComponent('VaultdiRic') + '&file=' + encodeURIComponent('wiki/scuola/' + obsName(v).replace(/\.md$/, '')) + '&overwrite=true&content=' + encodeURIComponent(buildMd(v));
     const filtro = h('div', { class: 'chips cor-f' });
-    const root = h('div', {}, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('div', { class: 'vhead' }, h('h2', {}, v.titolo || 'Verifica'), h('div', { class: 'vtags' },
+    const root = h('div', { class: 'corp' }, h('p', {}, h('a', { href: '#/scuola/verifiche' }, '← Verifiche')), classChips(v.classe, (c) => { const f = firstVer(c.id); return f ? '#/scuola/correggi/' + f.id : '#/scuola/classe/' + c.id; }), h('div', { class: 'vhead' }, h('h2', {}, v.titolo || 'Verifica'), h('div', { class: 'vtags' },
         h('span', { class: 'vt' }, matOf(v)), h('span', { class: 'vt' }, perOf(v)), h('span', { class: 'vt' }, '📅 ' + L.fmtDate(v.data)), h('span', { class: 'vt' }, L.num(m) + ' punti')),
         h('p', { class: 'note' }, 'Voto = ' + fmt1(r.min) + ' + punti ÷ ' + L.num(m) + ' × ' + fmt1(r.max - r.min) + ' (da ' + fmt1(r.min) + ' a ' + fmt1(r.max) + '). Si salva da solo.')),
       h('div', { class: 'bar' }, btn('Copia risultati', copy, 'pri'), h('a', { class: 'btn', href: '#/scuola/classe/' + v.classe }, 'Studenti della classe'),

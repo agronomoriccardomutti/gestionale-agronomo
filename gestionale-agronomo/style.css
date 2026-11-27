@@ -464,3 +464,9 @@ table.cor tr[hidden]{display:none}
   .corp table.cor td.nm{display:flex}
   .corp table.cor tbody tr{border-radius:16px;box-shadow:var(--sh,0 2px 8px rgba(0,0,0,.06))}
 }
+
+/* correzione: intestazione fissa e voto finale proposto */
+.corp .scroll.cor-w{overflow:visible}
+.corp table.cor th{top:calc(52px + env(safe-area-inset-top));z-index:4;box-shadow:0 1px 0 var(--bd),0 4px 8px -6px rgba(0,0,0,.25)}
+table.cor select.auto{font-style:italic;color:var(--mut);border-style:dashed}
+@supports (overflow:clip){html,body{overflow-x:clip}}

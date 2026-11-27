@@ -1886,7 +1886,16 @@
           h('div', { class: 'dleg' }, bk.map((x, i) => h('span', {}, h('b', { class: 'd-' + x[3] }), x[0] + ' · ' + cnt[i])))) : null);
     };
     const updateRow = (st) => {
-      const t = refs.get(st.id), cv = calcVal(v, valOf(vid, st.id));
+      const t = refs.get(st.id); let cv = calcVal(v, valOf(vid, st.id));
+      { // proposta del voto finale dal voto ipotetico (si aggiorna finché non scegli tu un voto)
+        const x = valOf(vid, st.id);
+        if (x && !x.assente) {
+          const compl = (v.parti || []).length > 0 && (v.parti || []).every((p) => x.scores && typeof x.scores[p.id] === 'number');
+          if (compl && cv.hyp !== null && ((typeof x.final !== 'number' && x.finAuto !== false) || x.finAuto === true)) { const f = Math.round(cv.hyp * 4) / 4; if (x.final !== f || x.finAuto !== true) { x.final = f; x.finAuto = true; x.updated = NOW(); save(); cv = calcVal(v, x); } }
+          else if (!compl && x.finAuto === true) { delete x.final; delete x.finAuto; x.updated = NOW(); save(); cv = calcVal(v, x); }
+        }
+        if (t.fin) { const o = [...t.fin.options].some((op) => op.value === String(x && x.final)); if (x && typeof x.final === 'number' && !o) t.fin.append(h('option', { value: String(x.final) }, String(x.final).replace('.', ','))); t.fin.value = x && typeof x.final === 'number' ? String(x.final) : ''; t.fin.classList.toggle('auto', !!(x && x.finAuto === true)); t.fin.title = x && x.finAuto === true ? 'Proposta dal voto: scegli un voto per confermarla' : ''; }
+      }
       t.tot.replaceChildren(cv.any ? h('div', { class: 'ptot' }, h('b', {}, fmt1(cv.tot)), h('span', { class: 'pbar' }, h('i', { style: 'width:' + Math.min(100, Math.round(cv.tot / (m || 1) * 100)) + '%' }))) : ''); t.hyp.replaceChildren(...[votoEl(cv.hyp), (cv.hyp !== null && cv.fin === null && !(valOf(vid, st.id) || {}).assente) ? h('button', { type: 'button', class: 'acc', title: 'Usa ' + fmt1(cv.hyp) + ' come voto finale', onclick: () => { const x = ensure(st.id); x.final = Math.round(cv.hyp * 4) / 4; x.updated = NOW(); save(); route(); } }, '→ finale') : null].filter(Boolean));
       if (typeof root !== 'undefined' && root._df) setTimeout(root._df, 0);
       const tr = t.tot.parentElement; // in rosso i campi ancora da compilare (punti e voto finale) per chi è presente
@@ -1918,7 +1927,8 @@
         });
         return h('td', { 'data-l': p.name + ' (max ' + L.num(p.max) + ')' }, inp);
       });
-      const fin = gradeSelect(val.final, (n) => { const x = ensure(st.id); x.final = n; x.updated = NOW(); save(); updateRow(st); renderStats(); }, 'Voto finale di ' + st.nome);
+      const fin = gradeSelect(val.final, (n) => { const x = ensure(st.id); if (n === '') delete x.final; else x.final = n; x.finAuto = false; x.updated = NOW(); save(); updateRow(st); renderStats(); }, 'Voto finale di ' + st.nome);
+      refs.get(st.id).fin = fin;
       tot.dataset.l = 'Punti / ' + L.num(m); hyp.dataset.l = 'Voto';
       return h('tr', { class: ass ? 'abs' : '' }, nm, pc, tot, hyp, h('td', { 'data-l': 'Voto finale' }, fin));
     });

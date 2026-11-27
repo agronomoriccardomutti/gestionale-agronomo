@@ -11,7 +11,7 @@
   cfg.on = !!(cfg.supabaseUrl && cfg.supabaseKey);
   const synced = (ek) => !cfg.localOnly.includes(ek);
   // dati sensibili: si sincronizzano tra i dispositivi ma non entrano mai nel calendario condiviso (webcal)
-  const FEED_NO = ['fatture', 'ricorrenti', 'movimenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie', 'studenti', 'valutazioni', 'verbali'];
+  const FEED_NO = ['fatture', 'ricorrenti', 'movimenti', 'pagamenti', 'spesePratica', 'preventivi', 'denunce', 'noteSpese', 'versamenti', 'diario', 'figlie', 'studenti', 'valutazioni', 'verbali', 'qcAzienda', 'qcCampi', 'qcProdotti', 'qcAcquisti', 'qcTrattamenti', 'qcSemine', 'qcOperazioni'];
 
   /* ---------- DOM helper (nessun innerHTML: i dati utente sono sempre testo) ---------- */
   function h(tag, attrs, ...kids) {
@@ -186,6 +186,94 @@
         { k: 'note', l: 'Note', t: 'textarea' }],
       title: (r) => r.prodotto, cols: ['tipo', 'quantita', 'unita', 'scadenza'],
       events: (r) => (r.scadenza ? [{ date: r.scadenza, info: 1, title: 'Scade prodotto: ' + r.prodotto }] : []),
+    },
+    /* Quaderno di campagna (registri PSR): dati anagrafici, campi, prodotti, acquisti, trattamenti, semine, operazioni */
+    qcAzienda: {
+      label: '📘 Quaderno', one: 'dati azienda', order: { k: 'ragione', dir: 1 },
+      fields: [
+        { k: 'ragione', l: 'Ragione sociale', t: 'text', req: 1 },
+        { k: 'cuaa', l: 'CUAA', t: 'text' }, { k: 'piva', l: 'Partita IVA', t: 'text' },
+        { k: 'indirizzo', l: 'Sede legale – indirizzo e n. civico', t: 'text' }, { k: 'comune', l: 'Sede legale – CAP e comune', t: 'text' }, { k: 'prov', l: 'Provincia', t: 'text' },
+        { k: 'ubIndirizzo', l: 'Ubicazione azienda – indirizzo (se diversa)', t: 'text' }, { k: 'ubComune', l: 'Ubicazione – comune', t: 'text' }, { k: 'ubProv', l: 'Ubicazione – provincia', t: 'text' },
+        { k: 'titolare', l: 'Titolare (cognome e nome)', t: 'text' }, { k: 'nascita', l: 'Data di nascita', t: 'date' }, { k: 'nascitaComune', l: 'Comune di nascita', t: 'text' },
+        { k: 'disciplinare', l: 'Regime / disciplinare', t: 'text', def: 'PSR - Produzione Integrata' },
+        { k: 'campagna', l: 'Campagna (anno)', t: 'number', step: '1', def: 2026 },
+        { k: 'macchina', l: 'Macchina irroratrice', t: 'text', def: 'POMPA SPALLEGGIATA' },
+        { k: 'dataAutocert', l: 'Data autocertificazione irroratrice', t: 'date' }],
+      title: (r) => r.ragione || 'Dati azienda', cols: ['cuaa', 'campagna'],
+    },
+    qcCampi: {
+      label: 'Campi', one: 'campo', order: { k: 'idc', dir: 1 },
+      fields: [
+        { k: 'idc', l: 'ID campo', t: 'text', req: 1 },
+        { k: 'tipologia', l: 'Tipologia', t: 'select', opts: ['Fruttifero', 'Seminativo', 'Altro'], req: 1 },
+        { k: 'coltura', l: 'Coltura', t: 'text', list: ['Pesco', 'Albicocco', 'Ciliegio', 'Uva da Tavola', 'Nocciolo', 'Prato', 'Seminativo'] },
+        { k: 'anno', l: 'Anno di impianto', t: 'number', step: '1' },
+        { k: 'particelle', l: 'Particelle (es. SSM 21/185, SSM 21/333)', t: 'text' },
+        { k: 'ha', l: 'Superficie (ha)', t: 'number', step: 'any' },
+        { k: 'fio1', l: 'Inizio fioritura', t: 'date' }, { k: 'fio2', l: 'Fine fioritura', t: 'date' }, { k: 'racc', l: 'Data raccolta', t: 'date' },
+        { k: 'prodAttesa', l: 'Produzione attesa (q/ha)', t: 'number', step: 'any' },
+        { k: 'asN', l: 'Asporto unitario N (kg/q)', t: 'number', step: 'any' }, { k: 'asP', l: 'Asporto unitario P2O5 (kg/q)', t: 'number', step: 'any' }, { k: 'asK', l: 'Asporto unitario K2O (kg/q)', t: 'number', step: 'any' },
+        { k: 'note', l: 'Note', t: 'textarea' },
+        { k: 'verifica', l: 'Da verificare (compare nel quaderno)', t: 'text' }],
+      title: (r) => r.idc, cols: ['coltura', 'ha', 'particelle'],
+    },
+    qcProdotti: {
+      label: 'Prodotti', one: 'prodotto', order: { k: 'nome', dir: 1 },
+      fields: [
+        { k: 'nome', l: 'Formulato commerciale', t: 'text', req: 1 },
+        { k: 'tipo', l: 'Tipo', t: 'select', opts: ['Fitosanitario', 'Semente / sovescio', 'Concime'], req: 1 },
+        { k: 'categoria', l: 'Tipologia (fungicida, insetticida…)', t: 'text', list: ['Fungicida', 'Insetticida', 'Erbicida', 'Acaricida', 'Altro'] },
+        { k: 'sostanza', l: 'Sostanza attiva', t: 'text' },
+        { k: 'registrazione', l: 'N. di registrazione', t: 'text' }, { k: 'regData', l: 'Data di registrazione', t: 'date' },
+        { k: 'formulato', l: 'Formulazione', t: 'text' },
+        { k: 'unita', l: 'Unità', t: 'select', opts: ['l', 'kg', 'g', 'ml'], req: 1 },
+        { k: 'giacIniz', l: 'Giacenza iniziale', t: 'number', step: 'any' },
+        { k: 'carenza', l: 'Carenza (giorni)', t: 'number', step: '1' },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => r.nome, cols: ['tipo', 'sostanza', 'registrazione'],
+    },
+    qcAcquisti: {
+      label: 'Acquisti', one: 'acquisto', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data consegna (DDT)', t: 'date', req: 1 },
+        { k: 'prodotto', l: 'Prodotto', t: 'text', req: 1, listFn: () => rows('qcProdotti').map((x) => x.nome) },
+        { k: 'quantita', l: 'Quantità', t: 'number', step: 'any' },
+        { k: 'fattura', l: 'Numero fattura', t: 'text' }, { k: 'dataFattura', l: 'Data fattura', t: 'date' }, { k: 'ddt', l: 'Numero DDT', t: 'text' },
+        { k: 'fornitore', l: 'Fornitore', t: 'text' }, { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => (r.prodotto || 'Acquisto') + (r.quantita ? ' – ' + L.num(r.quantita) : ''), cols: ['data', 'fattura', 'fornitore'],
+    },
+    qcTrattamenti: {
+      label: 'Trattamenti QdC', one: 'trattamento (quaderno)', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data', t: 'date', req: 1, def: 'today' },
+        { k: 'campo', l: 'ID campo', t: 'text', req: 1, listFn: () => rows('qcCampi').map((x) => x.idc) },
+        { k: 'prodotto', l: 'Prodotto', t: 'text', req: 1, listFn: () => rows('qcProdotti').filter((x) => (x.tipo || 'Fitosanitario') === 'Fitosanitario').map((x) => x.nome) },
+        { k: 'avversita', l: 'Avversità / patogeno', t: 'text' }, { k: 'fase', l: 'Fase fenologica', t: 'text' },
+        { k: 'doseHa', l: 'Dose (kg-l/ha)', t: 'number', step: 'any' }, { k: 'doseHl', l: 'Dose (kg-l/hl)', t: 'number', step: 'any' },
+        { k: 'volume', l: 'Volume miscela (hl)', t: 'number', step: 'any' }, { k: 'quantita', l: 'Quantità totale (kg-l)', t: 'number', step: 'any' },
+        { k: 'carenza', l: 'Carenza (giorni)', t: 'number', step: '1' }, { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => (r.prodotto || 'Trattamento') + ' – ' + (r.campo || ''), cols: ['data', 'avversita', 'quantita'],
+      extra: (r) => (+r.carenza > 0 && r.data ? ['Raccolta consentita dal ' + L.fmtDate(L.addDays(r.data, +r.carenza))] : []),
+    },
+    qcSemine: {
+      label: 'Semine / sovesci', one: 'semina', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data', t: 'date', req: 1, def: 'today' },
+        { k: 'prodotto', l: 'Seme / miscuglio', t: 'text', req: 1, listFn: () => rows('qcProdotti').filter((x) => (x.tipo || '') !== 'Fitosanitario').map((x) => x.nome) },
+        { k: 'campi', l: 'ID campi (separati da virgola)', t: 'text', req: 1 },
+        { k: 'ha', l: 'Superficie totale (ha)', t: 'number', step: 'any' }, { k: 'quantita', l: 'Quantità (kg)', t: 'number', step: 'any' }, { k: 'doseHa', l: 'Dose (kg/ha)', t: 'number', step: 'any' },
+        { k: 'tipo', l: 'Tipo', t: 'text', def: 'Organico' }, { k: 'metodo', l: 'Metodo', t: 'text', def: 'Pieno campo' }, { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => (r.prodotto || 'Semina') + ' – ' + L.fmtDate(r.data), cols: ['quantita', 'ha'],
+    },
+    qcOperazioni: {
+      label: 'Operazioni', one: 'operazione colturale', order: { k: 'data', dir: -1 },
+      fields: [
+        { k: 'data', l: 'Data', t: 'date', req: 1, def: 'today' },
+        { k: 'operazione', l: 'Operazione', t: 'text', req: 1, list: ['Potatura', 'Trinciatura', 'Spollonatura', 'Raccolta', 'Messa a Dimora', 'Erpicatura - Ripper', 'Erpicatura - Disco', 'Semina / sovescio', 'Irrigazione', 'Diradamento', 'Interceppi', 'Innesti', 'Zappatura manuale'] },
+        { k: 'campi', l: 'ID campi (separati da virgola)', t: 'text', req: 1 },
+        { k: 'note', l: 'Note', t: 'textarea' }],
+      title: (r) => (r.operazione || 'Operazione') + ' – ' + (r.campi || ''), cols: ['data'],
     },
     manutenzioni: {
       label: 'Manutenzioni', one: 'manutenzione', order: { k: 'scadenza', dir: 1 },
@@ -637,7 +725,7 @@
 
   const MODS = [
     { id: 'oggi', label: 'Oggi', icon: '📅' },
-    { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
+    { id: 'campagna', label: 'Campagna', icon: '🌱', ents: ['qcAzienda', 'qcCampi', 'qcProdotti', 'qcAcquisti', 'qcTrattamenti', 'qcSemine', 'qcOperazioni', 'trattamenti', 'concimazioni', 'raccolte', 'parcelle', 'magazzino'] },
     { id: 'casa', label: 'Casa e cascina', icon: '🏠', ents: ['manutenzioni'] },
     { id: 'ispezioni', label: 'Ispezioni', icon: '📋', ents: ['periodi', 'aziende', 'ispezioni', 'noteSpese'] },
     { id: 'professione', label: 'Professione', icon: '💼', ents: ['pratiche', 'clienti', 'fatture', 'versamenti'] },
@@ -944,7 +1032,7 @@
   const SUMMARY = {
     campagna: () => {
       const y = year(); const inY = (ek) => rows(ek).filter((r) => (r.data || '').startsWith(y));
-      return [['Superficie', L.num(sum(rows('parcelle'), 'ettari')) + ' ha'], ['Trattamenti ' + y, inY('trattamenti').length], ['Raccolto ' + y, L.num(sum(inY('raccolte'), 'kg')) + ' kg']];
+      return [['Superficie', L.num(rows('qcCampi').length ? sum(rows('qcCampi'), 'ha') : sum(rows('parcelle'), 'ettari')) + ' ha'], ['Trattamenti ' + y, inY('trattamenti').length + inY('qcTrattamenti').length], ['Raccolto ' + y, L.num(sum(inY('raccolte'), 'kg')) + ' kg']];
     },
     ispezioni: () => {
       const y = year(); const l = rows('ispezioni').filter((r) => (r.data || '').startsWith(y));
@@ -1122,9 +1210,58 @@
       h('p', { class: 'note' }, 'I PDF restano salvati solo su questo dispositivo (non nel backup né nella sincronizzazione): tieni una copia anche su cloud e, se vuoi, incolla il link nel versamento. Il totale per gruppo (Contributi / Imposte / Altre spese) è dedotto dal nome della categoria.'));
   }
 
+  /* ---------- Quaderno di campagna ---------- */
+  const qcData = () => ({ azienda: rows('qcAzienda')[0], campi: rows('qcCampi'), prodotti: rows('qcProdotti'), acquisti: rows('qcAcquisti'), trattamenti: rows('qcTrattamenti'), semine: rows('qcSemine'), operazioni: rows('qcOperazioni') });
+  const QC_KEYS = ['qcAzienda', 'qcCampi', 'qcProdotti', 'qcAcquisti', 'qcTrattamenti', 'qcSemine', 'qcOperazioni'];
+  async function qcPdf() {
+    toast('Preparo il quaderno…');
+    const need = (src, test) => test() ? 0 : new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('file ' + src + ' non disponibile')); document.head.append(sc); });
+    await need('vendor/pdf-lib.min.js', () => window.PDFLib); await need('quaderno.js', () => window.Quaderno);
+    const d = qcData(); if (!d.campi.length) return toast('Importa prima i dati del quaderno');
+    const bytes = await window.Quaderno.build(d, window.PDFLib);
+    await deliver(bytes, 'Quaderno-di-campagna-' + ((d.azienda && d.azienda.campagna) || year()) + '.pdf', 'application/pdf');
+    toast('Quaderno pronto');
+  }
+  function qcImport(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const j = JSON.parse(rd.result); if (j.formato !== 'gestionale-quaderno') throw new Error('non è un file del quaderno');
+        if (rows('qcCampi').length && !confirm('Il quaderno contiene già dei dati: l\'importazione sovrascrive i record con lo stesso codice (le tue modifiche a quei record andranno perse). Continuo?')) return;
+        const now = new Date().toISOString(); let n = 0;
+        for (const ek of QC_KEYS) for (const it of (j[ek] || [])) {
+          const rec = Object.assign({}, it, { updated: now }), i = rows(ek).findIndex((x) => x.id === rec.id);
+          if (i >= 0) rows(ek)[i] = rec; else rows(ek).push(rec); n++;
+        }
+        save(); route(); toast(n + ' record importati nel quaderno');
+      } catch (e) { toast('Importazione non riuscita: ' + (e.message || e)); }
+    };
+    rd.readAsText(file);
+  }
+  function viewQuaderno() {
+    const d = qcData(), has = d.campi.length > 0;
+    const fi = h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: (e) => { if (e.target.files[0]) qcImport(e.target.files[0]); e.target.value = ''; } });
+    const root = h('div', {}, h('h3', {}, '📘 Quaderno di campagna ' + ((d.azienda && d.azienda.campagna) || year())),
+      h('div', { class: 'bar' }, btn('📄 Genera quaderno PDF', () => qcPdf().catch((e) => toast('PDF non riuscito: ' + (e.message || e))), has ? 'pri' : ''),
+        btn('✏️ Dati azienda', () => openForm('qcAzienda', d.azienda || null), d.azienda ? '' : 'pri'), btn('📥 Importa da file', () => fi.click(), has ? '' : 'pri'), fi));
+    if (!has) { root.append(h('div', { class: 'empty' }, 'Nessun dato nel quaderno. Importa il file “quaderno-2026.json” (Importa da file) oppure inserisci campi, prodotti e trattamenti dalle schede qui sopra.')); return root; }
+    const ck = window.Quaderno ? window.Quaderno.checks(d) : null;
+    root.append(tiles([['Campi', d.campi.length], ['Prodotti', d.prodotti.length], ['Trattamenti', d.trattamenti.length], ['Operazioni', d.operazioni.length]]));
+    const box = h('div', {}); root.append(box);
+    const draw = (ck) => {
+      const m = ck.filter((c) => c.t === 'm'), v = ck.filter((c) => c.t === 'v');
+      box.replaceChildren(h('h3', {}, '⚠️ Da completare e verificare'), h('p', { class: 'note' }, m.length + ' dati mancanti · ' + v.length + ' da verificare. Nel PDF questi punti sono evidenziati in giallo.'),
+        ck.length ? h('div', { class: 'list' }, ck.map((c) => h('article', { class: 'card' }, h('div', { class: 'card-t' }, c.voce), h('div', { class: 'card-m' }, c.doc + ' · ' + c.azione), h('div', { class: 'card-a' }, tag(c.t === 'm' ? 'Mancante' : 'Verificare', c.t === 'm' ? 'warn' : 'info')))))
+          : h('div', { class: 'empty' }, 'Nessun dato mancante: il quaderno è completo.'),
+        h('p', { class: 'note' }, 'I dati del quaderno sono salvati solo nel tuo gestionale (e sincronizzati con il tuo spazio privato), mai nel codice pubblicato.'));
+    };
+    if (ck) draw(ck); else { const sc = document.createElement('script'); sc.src = 'quaderno.js'; sc.onload = () => draw(window.Quaderno.checks(d)); sc.onerror = () => draw([]); document.head.append(sc); }
+    return root;
+  }
+
   function viewModule(mod, ek) {
     ek = mod.ents.includes(ek) ? ek : mod.ents[0];
-    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : ek === 'riunioni' ? viewDipartimento() : ek === 'diario' ? viewDiario() : viewList(ek);
+    const body = ek === 'periodi' ? viewPeriodi() : ek === 'noteSpese' ? viewNoteSpese() : ek === 'versamenti' ? viewVersamenti() : ek === 'appunti' ? viewAppunti() : ek === 'riunioni' ? viewDipartimento() : ek === 'diario' ? viewDiario() : ek === 'qcAzienda' ? viewQuaderno() : viewList(ek);
     const extra = mod.id === 'scuola' && ek === 'classi' && CLASSI_STD.some((n) => !rows('classi').some((c) => normCl(c.nome) === normCl(n)))
       ? h('div', { class: 'bar' }, btn('➕ Crea classi 3°A 3°B 4°A 4°B 5°A 5°B', creaClassi, 'pri')) : mod.id === 'scuola' && ek === 'verifiche' ? h('div', { class: 'bar' }, btn('📥 Importa verifica', () => openImportVerifica(), 'pri'))
         : mod.id === 'scuola' && ek === 'verbali' ? h('div', { class: 'bar' }, rows('classi').filter((c) => c.coordinatore).map((c) => btn('+ Verbale CdC ' + c.nome, () => newVerbale('Consiglio di classe', c.id), 'pri')), btn('+ Verbale Dipartimento', () => newVerbale('Dipartimento Scienze Agrarie'), ''), h('span', { class: 'note' }, 'Prima inserisci i docenti e le cattedre (schede “Docenti” e “Consigli di classe”). Spunta “Sono il coordinatore” nella tua classe.')) : null;
